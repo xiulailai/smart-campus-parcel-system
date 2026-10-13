@@ -1,0 +1,10 @@
+ResourceID,Type,Name,Status,CurrentAssignment
+C01,Counter,Counter 1,Available,NONE
+C02,Counter,Counter 2,Occupied,R003
+C03,Counter,Counter 3,Unavailable,NONE
+C04,Counter,Counter 4,Available,NONE
+D01,Delivery,Ahmad Faiz,Occupied,R004
+D02,Delivery,Rajesh Kumar,Occupied,R005
+D03,Delivery,Lim Boon Hock,Occupied,R006
+D04,Delivery,Siti Nabilah,Available,NONE
+D05,Delivery,Muthu Samy,Unavailable,NONE

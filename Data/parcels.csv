@@ -1,0 +1,41 @@
+ParcelID,RecipientName,RecipientID,DeliveryInfo,ParcelType,Courier,ArrivalDateTime,Status
+P001,Aina Rahman,TP012345,Block A L3,Standard,J&T,2026-10-12 08:05,Collected
+P002,Daniel Lim,TP012346,Counter,Fragile,Pos Laju,2026-10-12 08:20,Collected
+P003,Nur Sofea,TP012347,Block B L1,Urgent,DHL,2026-10-12 08:45,Delivered
+P004,Kumar Raj,STAFF021,Admin Office,Oversized,J&T,2026-10-12 09:10,Delivered
+P005,Mei Ling Tan,TP012348,Counter,Standard,Shopee Xpress,2026-10-12 09:30,Collected
+P006,Haziq Azman,TP012349,Block C L2,Standard,Flash Express,2026-10-12 09:55,Returned
+P007,Priya Nair,TP012350,Counter,Fragile,Ninja Van,2026-10-12 10:15,Cancelled
+P008,Wei Jie Ong,TP012351,Block A L5,Urgent,DHL,2026-10-12 10:40,Delivered
+P009,Siti Aisyah,STAFF022,Library Office,Standard,Pos Laju,2026-10-12 11:00,Collected
+P010,Farid Hakim,TP012352,Counter,Oversized,J&T,2026-10-12 11:25,Missing
+P011,Chloe Wong,TP012353,Block D L1,Standard,Shopee Xpress,2026-10-12 13:05,Collected
+P012,Arjun Singh,TP012354,Block B L4,Fragile,Ninja Van,2026-10-12 13:30,Delivered
+P013,Nurul Huda,TP012355,Counter,Standard,Flash Express,2026-10-12 14:00,Collected
+P014,Jason Teo,TP012356,Block A L2,Urgent,DHL,2026-10-12 14:20,Delivered
+P015,Aisha Binti Omar,STAFF023,Finance Office,Standard,J&T,2026-10-12 15:10,Collected
+P016,Lee Chong Wei,TP012357,Counter,Standard,Pos Laju,2026-10-12 15:45,Collected
+P017,Tharini Devi,TP012358,Block C L3,Fragile,Shopee Xpress,2026-10-12 16:15,OnHold
+P018,Amir Syafiq,TP012359,Block D L2,Standard,Ninja Van,2026-10-12 16:40,Returned
+P019,Grace Lau,TP012360,Counter,Oversized,Flash Express,2026-10-12 17:05,Collected
+P020,Rizal Ahmad,TP012361,Block B L2,Standard,J&T,2026-10-12 17:30,Delivered
+P021,Aina Rahman,TP012345,Block A L3,Fragile,Pos Laju,2026-10-13 08:00,Registered
+P022,Sarah Chen,TP012362,Counter,Standard,DHL,2026-10-13 08:10,Registered
+P023,Muhammad Irfan,TP012363,Block C L1,Urgent,J&T,2026-10-13 08:20,Registered
+P024,Kavitha Raman,STAFF024,HR Office,Standard,Ninja Van,2026-10-13 08:30,ReadyForCollection
+P025,Daniel Lim,TP012346,Counter,Standard,Shopee Xpress,2026-10-13 08:40,ReadyForCollection
+P026,Yuki Tanaka,TP012364,Block A L4,Fragile,DHL,2026-10-13 08:55,SpecialHandling
+P027,Nur Sofea,TP012347,Block B L1,Standard,Flash Express,2026-10-13 09:05,Registered
+P028,Brandon Ng,TP012365,Block D L3,Oversized,J&T,2026-10-13 09:15,AssignedForDelivery
+P029,Zulaikha Yusof,TP012366,Counter,Urgent,Pos Laju,2026-10-13 09:25,ReadyForCollection
+P030,Vijay Kumar,TP012367,Block C L2,Standard,Ninja Van,2026-10-13 09:35,AssignedForDelivery
+P031,Mei Ling Tan,TP012348,Counter,Fragile,Shopee Xpress,2026-10-13 09:50,Registered
+P032,Hana Abdullah,TP012368,Block B L3,Standard,DHL,2026-10-13 10:00,Registered
+P033,Kumar Raj,STAFF021,Admin Office,Standard,J&T,2026-10-13 10:10,AssignedForDelivery
+P034,Emily Foo,TP012369,Counter,Standard,Flash Express,2026-10-13 10:20,Registered
+P035,Ismail Hassan,TP012370,Block A L1,Urgent,Pos Laju,2026-10-13 10:30,OnHold
+P036,Divya Pillai,TP012371,Block D L1,Fragile,Ninja Van,2026-10-13 10:40,SpecialHandling
+P037,Haziq Azman,TP012349,Counter,Oversized,J&T,2026-10-13 10:50,Registered
+P038,Pei Shan Goh,TP012372,Block C L4,Standard,Shopee Xpress,2026-10-13 11:00,Registered
+P039,Faizal Rahim,STAFF025,Security Office,Standard,DHL,2026-10-13 11:10,ReadyForCollection
+P040,Anis Sofia,TP012373,Block B L5,Urgent,Flash Express,2026-10-13 11:20,Registered

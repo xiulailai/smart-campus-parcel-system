@@ -1,0 +1,20 @@
+RequestID,ParcelID,ServiceType,Urgency,RequestTime,Status
+R001,P025,Collection,2,2026-10-13 09:00,Pending
+R002,P029,Collection,1,2026-10-13 09:40,Pending
+R003,P024,Collection,3,2026-10-13 09:45,Assigned
+R004,P028,CampusDelivery,2,2026-10-13 09:50,Assigned
+R005,P030,CampusDelivery,2,2026-10-13 10:00,Assigned
+R006,P033,CampusDelivery,3,2026-10-13 10:15,Assigned
+R007,P026,SpecialHandling,1,2026-10-13 09:10,Pending
+R008,P036,SpecialHandling,2,2026-10-13 10:45,Pending
+R009,P023,CampusDelivery,1,2026-10-13 08:35,Pending
+R010,P040,CampusDelivery,1,2026-10-13 11:25,Pending
+R011,P022,Collection,3,2026-10-13 08:25,Pending
+R012,P035,ReDelivery,2,2026-10-13 10:35,Cancelled
+R013,P006,Return,3,2026-10-12 10:30,Completed
+R014,P002,Collection,2,2026-10-12 08:30,Completed
+R015,P003,CampusDelivery,1,2026-10-12 09:00,Completed
+R016,P018,Return,3,2026-10-12 17:00,Completed
+R017,P031,Collection,2,2026-10-13 10:05,Pending
+R018,P032,Collection,2,2026-10-13 10:05,Pending
+R019,P039,Collection,3,2026-10-13 11:15,Pending
