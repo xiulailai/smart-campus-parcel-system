@@ -16,31 +16,38 @@ std::string findDataFile(const std::string& fileName) {
 }
 
 // ---------------------------------------------------------------------------
-// Integrated flow (system steps 5-7):
-//   Task 2 picks the next request  ->  Task 3 assigns a counter / delivery person.
-// If Task 3 has nobody free, the request goes back to Pending so nothing is lost.
+// Integrated flow (system steps 5-7).  Task 2 decides, Task 3 allocates:
+//   1. Task 2 says which Pending request is the most urgent      (peekNext)
+//   2. Task 2 checks the request can be assigned right now       (validateForAssignment)
+//   3. Task 3 allocates a counter / delivery person              (assignRequest)
+//   4. Task 2 marks the request Assigned and saves requests.csv  (markAssigned)
+// If nobody is free in step 3 nothing changes: the request simply stays Pending.
 // ---------------------------------------------------------------------------
-void dispatchAndAssign(ServiceModule& service, ResourceManager& resources,
+void assignNextRequest(ServiceModule& service, ResourceManager& resources,
     const std::string& resourcesPath) {
     ServiceRequest r;
     std::string msg;
-    if (!service.dispatchNext(r, msg)) {            // Pending -> Assigned
+    if (!service.peekNext(r)) {
+        std::cout << "[Info] No pending service requests.\n";
+        return;
+    }
+    std::cout << "Next request: " << r.requestID << " (" << r.serviceType
+        << ", urgency " << r.urgency << ", parcel " << r.parcelID << ")\n";
+
+    if (!service.validateForAssignment(r.requestID, msg)) {
         std::cout << "[Error] " << msg << "\n";
         return;
     }
-    std::cout << "Dispatching " << r.requestID << " (" << r.serviceType
-        << ", parcel " << r.parcelID << ")...\n";
+    if (!resources.assignRequest(r.requestID, r.serviceType)) {
+        std::cout << "[Info] " << r.requestID << " stays Pending.\n";
+        return;
+    }
+    resources.saveToCSV(resourcesPath);              // keep resources.csv in step
 
-    if (resources.assignRequest(r.requestID, r.serviceType)) {
-        resources.saveToCSV(resourcesPath);          // keep resources.csv in step
-        std::cout << "[OK] " << r.requestID << " is now Assigned to a resource.\n";
-    }
-    else {
-        std::string undoMsg;                         // nobody free: back to the queue
-        service.restoreRequestStatus(r.requestID, STATUS_PENDING, undoMsg);
-        std::cout << "[Info] No resource available. " << r.requestID
-            << " returned to the pending queue.\n";
-    }
+    if (service.markAssigned(r.requestID, msg))
+        std::cout << "[OK] " << msg << "\n";
+    else
+        std::cout << "[Warning] Resource allocated but request not updated: " << msg << "\n";
 }
 
 int readMenuChoice() {
@@ -69,7 +76,7 @@ int main() {
             << "==============================================\n"
             << "  2. Task 2 - Service requests\n"
             << "  3. Task 3 - Counters and delivery resources\n"
-            << "  4. Integrated: dispatch next request AND assign a resource\n"
+            << "  4. Assign a resource to the next request (Task 2 + Task 3)\n"
             << "  0. Exit\n"
             << "----------------------------------------------\n"
             << "Enter choice: ";
@@ -77,7 +84,7 @@ int main() {
         switch (choice) {
         case 2: service.run();                                   break;
         case 3: runTask3Menu(manager);                           break;
-        case 4: dispatchAndAssign(service, manager, resourcesPath); break;
+        case 4: assignNextRequest(service, manager, resourcesPath); break;
         case 0:                                                  break;
         default: std::cout << "Invalid choice.\n";               break;
         }

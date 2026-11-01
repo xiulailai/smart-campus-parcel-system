@@ -126,8 +126,8 @@ static string parcelStatusAfterCompletion(const string& service)
     return "ReadyForCollection";             // SpecialHandling finished
 }
 
-// Parcel status change when a request is DISPATCHED ("" = no change).
-static string parcelStatusOnDispatch(const string& service)
+// Parcel status change when a request becomes ASSIGNED ("" = no change).
+static string parcelStatusOnAssignment(const string& service)
 {
     if (service == SERVICE_CAMPUS_DELIVERY || service == SERVICE_REDELIVERY)
         return "AssignedForDelivery";
@@ -601,47 +601,71 @@ bool ServiceModule::createRequest(const string& parcelIDIn, const string& recipi
     return true;
 }
 
-// Req 3 + 4: take the highest-priority Pending request and hand it to Task 3
-bool ServiceModule::dispatchNext(ServiceRequest& out, string& msg)
+// Hand-over step 2: can this Pending request safely be given to a resource?
+bool ServiceModule::validateForAssignment(const string& requestID, string& msg) const
 {
-    int idx = pendingQueue.peek();
-    if (idx < 0) { msg = "No pending service requests to dispatch."; return false; }
-    ServiceRequest& r = store.at(idx);
+    string id = toUpper(trim(requestID));
+    int idx = store.findByID(id);
+    if (idx < 0) { msg = "Request ID '" + id + "' does not exist."; return false; }
+
+    const ServiceRequest& r = store.at(idx);
+    if (r.status == STATUS_ASSIGNED) { msg = "Request " + id + " is already assigned."; return false; }
+    if (r.status == STATUS_COMPLETED) { msg = "Request " + id + " is already completed."; return false; }
+    if (r.status == STATUS_CANCELLED) { msg = "Request " + id + " was cancelled and cannot be assigned."; return false; }
 
     ParcelTable parcels;
     if (!parcels.load(parcelsPath))
     {
-        msg = "Cannot read " + parcelsPath + ". Dispatch aborted."; return false;
+        msg = "Cannot read " + parcelsPath + ". Request " + id + " cannot be assigned."; return false;
     }
 
     int p = parcels.find(r.parcelID);
     if (p < 0)
     {
-        msg = "Next request " + r.requestID + " refers to missing parcel " + r.parcelID
+        msg = "Request " + id + " refers to missing parcel " + r.parcelID
             + ". Cancel it (menu 7) before continuing."; return false;
     }
 
     if (!parcelAllowsService(r.serviceType, parcels.at(p).status))
     {
-        msg = "Next request " + r.requestID + " cannot be processed: parcel " + r.parcelID
+        msg = "Request " + id + " cannot be processed: parcel " + r.parcelID
             + " has status '" + parcels.at(p).status + "'. Cancel it (menu 7) or correct the parcel."; return false;
     }
 
-    string newParcelStatus = parcelStatusOnDispatch(r.serviceType);
-    if (!newParcelStatus.empty() && parcels.at(p).status != newParcelStatus)
+    return true;
+}
+
+// Hand-over step 4: called AFTER a resource has been allocated (by Task 3).
+// Pending -> Assigned, the request leaves the priority queue, parcel updated.
+bool ServiceModule::markAssigned(const string& requestID, string& msg)
+{
+    if (!validateForAssignment(requestID, msg)) return false;
+
+    int idx = store.findByID(toUpper(trim(requestID)));
+    ServiceRequest& r = store.at(idx);
+
+    // the parcel moves to its next stage (e.g. AssignedForDelivery)
+    string newParcelStatus = parcelStatusOnAssignment(r.serviceType);
+    if (!newParcelStatus.empty())
     {
-        parcels.at(p).status = newParcelStatus;
-        if (!parcels.save(parcelsPath))
+        ParcelTable parcels;
+        if (!parcels.load(parcelsPath))
         {
-            msg = "Cannot update " + parcelsPath + ". Dispatch aborted."; return false;
+            msg = "Cannot read " + parcelsPath + ". Request not marked as assigned."; return false;
+        }
+        int p = parcels.find(r.parcelID);
+        if (p >= 0 && parcels.at(p).status != newParcelStatus)
+        {
+            parcels.at(p).status = newParcelStatus;
+            if (!parcels.save(parcelsPath))
+            {
+                msg = "Cannot update " + parcelsPath + ". Request not marked as assigned."; return false;
+            }
         }
     }
 
-    pendingQueue.dequeue();                                    // r is the top item
-    r.status = STATUS_ASSIGNED;
-    out = r;
-    msg = "Request " + r.requestID + " dispatched (Pending -> Assigned). "
-        "Allocate a counter / delivery resource next (Task 3).";
+    applyStatus(idx, STATUS_ASSIGNED);             // also removes it from the queue
+    msg = "Request " + r.requestID + " marked as Assigned (Pending -> Assigned).";
     persist(msg);
     return true;
 }
@@ -658,7 +682,7 @@ bool ServiceModule::completeRequest(const string& requestID, const string& colle
     if (r.status == STATUS_CANCELLED) { msg = "Request " + id + " was cancelled and cannot be processed."; return false; }
     if (r.status == STATUS_PENDING)
     {
-        msg = "Request " + id + " is still Pending. Dispatch it first (menu 5)."; return false;
+        msg = "Request " + id + " is still Pending. Mark it as Assigned first (menu 5)."; return false;
     }
 
     ParcelTable parcels;
@@ -760,7 +784,7 @@ void ServiceModule::showMenu() const
         << "  2. Display active requests (priority order)\n"
         << "  3. View request details\n"
         << "  4. Show next request to be handled\n"
-        << "  5. Dispatch next request     (Pending  -> Assigned)\n"
+        << "  5. Mark request as Assigned  (Pending  -> Assigned)\n"
         << "  6. Complete assigned request (Assigned -> Completed)\n"
         << "  7. Cancel request\n"
         << "  8. Display all request records\n"
@@ -781,7 +805,7 @@ void ServiceModule::run()
         case 2: menuDisplayActive(); break;
         case 3: menuView();          break;
         case 4: menuNext();          break;
-        case 5: menuDispatch();      break;
+        case 5: menuMarkAssigned();   break;
         case 6: menuComplete();      break;
         case 7: menuCancel();        break;
         case 8: menuDisplayAll();    break;
@@ -900,12 +924,13 @@ void ServiceModule::menuNext() const
     cout << "\nRule: highest urgency first, then earliest request time, then smallest Request ID.\n";
 }
 
-void ServiceModule::menuDispatch()
+void ServiceModule::menuMarkAssigned()
 {
-    ServiceRequest r;
+    cout << "\n(Use this after a counter / delivery resource has been allocated in Task 3.)\n";
+    string id = toUpper(readLine("Request ID to mark as Assigned: "));
     string msg;
-    bool ok = dispatchNext(r, msg);
-    cout << "\n" << (ok ? "[OK] " : "[Error] ") << msg << "\n";
+    bool ok = markAssigned(id, msg);
+    cout << (ok ? "[OK] " : "[Error] ") << msg << "\n";
 }
 
 void ServiceModule::menuComplete()

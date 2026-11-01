@@ -177,7 +177,7 @@ private:
     void menuDisplayActive() const;
     void menuView() const;
     void menuNext() const;
-    void menuDispatch();
+    void menuMarkAssigned();
     void menuComplete();
     void menuCancel();
     void menuDisplayAll() const;
@@ -196,8 +196,14 @@ public:
     bool createRequest(const string& parcelID, const string& recipientID,
         const string& serviceType, int urgency, string& msg);
     bool peekNext(ServiceRequest& out) const;
-    // Pending -> Assigned. Task 3 then allocates a counter / delivery person.
-    bool dispatchNext(ServiceRequest& out, string& msg);
+    // ---- assignment hand-over with Task 3 ----
+    // 1) peekNext()                 : which Pending request is most urgent? (queue unchanged)
+    // 2) validateForAssignment()    : is it safe to give it to a resource right now?
+    // 3) Task 3 allocates a counter / delivery person and saves resources.csv
+    // 4) markAssigned()             : Pending -> Assigned, parcel updated, requests.csv saved
+    // A request is therefore only ever Assigned when a resource really holds it.
+    bool validateForAssignment(const string& requestID, string& msg) const;
+    bool markAssigned(const string& requestID, string& msg);
     // Assigned -> Completed and updates the parcel's status in parcels.csv.
     bool completeRequest(const string& requestID, const string& collectorID, string& msg);
     // Pending/Assigned -> Cancelled.
