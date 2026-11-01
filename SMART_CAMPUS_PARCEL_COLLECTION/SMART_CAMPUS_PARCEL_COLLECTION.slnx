@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="SMART_CAMPUS_PARCEL_COLLECTION.vcxproj" />
+  <Project Path="SMART_CAMPUS_PARCEL_COLLECTION.vcxproj" Id="a733202f-c0a8-4c05-9c57-07d0c67a01af" />
 </Solution>
