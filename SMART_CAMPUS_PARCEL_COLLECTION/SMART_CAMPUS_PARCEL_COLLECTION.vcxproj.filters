@@ -24,12 +24,18 @@
     <ClCompile Include="Code\Task2\ServiceRequest.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Code\Task1\ParcelIntake.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Code\Task3\ResourceQueue.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Code\Task2\ServiceRequest.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Task1\ParcelIntake.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
