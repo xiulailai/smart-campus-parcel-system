@@ -1,3 +1,4 @@
+#include "Task1/ParcelIntake.hpp"
 #include "Task2/ServiceRequest.hpp"
 #include "Task3/ResourceQueue.hpp"
 #include <fstream>
@@ -13,6 +14,39 @@ std::string findDataFile(const std::string& fileName) {
         if (test.is_open()) return path;
     }
     return fileName;   // not found: loadFromCSV will show the error
+}
+
+// ---------------------------------------------------------------------------
+// Integrated flow (system steps 2-4).  Task 1 sorts, Task 2 opens the service:
+//   1. Task 1 shows the parcel at the front of the intake queue, suggests a
+//      route and staff confirm it                            (sortNextParcel)
+//   2. Task 1 updates the parcel status and removes it from the queue
+//   3. If the new status needs a service, Task 2 creates the matching
+//      Pending request, ready for option 4 to give it a resource (createRequest)
+// Return-to-sender and on-hold parcels wait for staff, so no request is made.
+// ---------------------------------------------------------------------------
+std::string serviceForSortedParcel(const std::string& parcelStatus) {
+    if (parcelStatus == PARCEL_READY_FOR_COLLECTION)  return SERVICE_COLLECTION;
+    if (parcelStatus == PARCEL_ASSIGNED_FOR_DELIVERY) return SERVICE_CAMPUS_DELIVERY;
+    if (parcelStatus == PARCEL_SPECIAL_HANDLING)      return SERVICE_SPECIAL_HANDLING;
+    return "";
+}
+
+void sortAndRequestNext(ParcelModule& parcels, ServiceModule& service) {
+    Parcel p;
+    if (!parcels.sortNextParcel(p)) return;          // Task 1 already said why
+
+    std::string serviceType = serviceForSortedParcel(p.status);
+    if (serviceType.empty()) {
+        std::cout << "[Info] " << p.parcelID << " is " << p.status << ": no service request needed now.\n";
+        return;
+    }
+    std::string msg;
+    int urgency = parcels.suggestedUrgency(p);
+    if (service.createRequest(p.parcelID, p.recipientID, serviceType, urgency, msg))
+        std::cout << "[OK] " << msg << " Urgency " << urgency << " (" << p.parcelType << " parcel).\n";
+    else
+        std::cout << "[Info] No new request: " << msg << "\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +97,9 @@ int main() {
     std::string parcelsPath = findDataFile("parcels.csv");
     std::string resourcesPath = findDataFile("resources.csv");
 
+    ParcelModule parcels(parcelsPath, requestsPath);    // Task 1
+    parcels.load();
+
     ServiceModule service(requestsPath, parcelsPath);   // Task 2
     service.load();
 
@@ -74,17 +111,21 @@ int main() {
         std::cout << "\n==============================================\n"
             << "  SMART CAMPUS PARCEL SYSTEM\n"
             << "==============================================\n"
+            << "  1. Task 1 - Parcel intake, sorting and processing\n"
             << "  2. Task 2 - Service requests\n"
             << "  3. Task 3 - Counters and delivery resources\n"
             << "  4. Assign a resource to the next request (Task 2 + Task 3)\n"
+            << "  5. Sort the next parcel and open its request (Task 1 + Task 2)\n"
             << "  0. Exit\n"
             << "----------------------------------------------\n"
             << "Enter choice: ";
         choice = readMenuChoice();
         switch (choice) {
+        case 1: parcels.run();                                   break;
         case 2: service.run();                                   break;
         case 3: runTask3Menu(manager);                           break;
         case 4: assignNextRequest(service, manager, resourcesPath); break;
+        case 5: sortAndRequestNext(parcels, service);            break;
         case 0:                                                  break;
         default: std::cout << "Invalid choice.\n";               break;
         }
