@@ -91,8 +91,7 @@ static bool isValidServiceType(const string& s)
 
 static bool isValidStatus(const string& s)
 {
-    return s == STATUS_PENDING || s == STATUS_ASSIGNED ||
-        s == STATUS_COMPLETED || s == STATUS_CANCELLED;
+    return s == STATUS_PENDING || s == STATUS_ASSIGNED || s == STATUS_COMPLETED || s == STATUS_CANCELLED;
 }
 
 // ---- Business rules shared with Task 1 (agree on these with the team) ------
@@ -112,7 +111,7 @@ static bool parcelAllowsService(const string& service, const string& parcelStatu
     if (service == SERVICE_REDELIVERY)
         return registered || parcelStatus == "OnHold" || parcelStatus == "AssignedForDelivery";
     if (service == SERVICE_RETURN)
-        return registered || parcelStatus == "ReadyForCollection" || parcelStatus == "OnHold";
+        return registered || parcelStatus == "ReadyForCollection" || parcelStatus == "OnHold" || parcelStatus == "ReturnToSender";
     return false;
 }
 

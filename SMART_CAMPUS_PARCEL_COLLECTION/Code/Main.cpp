@@ -23,12 +23,13 @@ std::string findDataFile(const std::string& fileName) {
 //   2. Task 1 updates the parcel status and removes it from the queue
 //   3. If the new status needs a service, Task 2 creates the matching
 //      Pending request, ready for option 4 to give it a resource (createRequest)
-// Return-to-sender and on-hold parcels wait for staff, so no request is made.
+// On-hold parcels wait for staff, so no request is made.
 // ---------------------------------------------------------------------------
 std::string serviceForSortedParcel(const std::string& parcelStatus) {
     if (parcelStatus == PARCEL_READY_FOR_COLLECTION)  return SERVICE_COLLECTION;
     if (parcelStatus == PARCEL_ASSIGNED_FOR_DELIVERY) return SERVICE_CAMPUS_DELIVERY;
     if (parcelStatus == PARCEL_SPECIAL_HANDLING)      return SERVICE_SPECIAL_HANDLING;
+    if (parcelStatus == PARCEL_RETURN_TO_SENDER)      return SERVICE_RETURN;
     return "";
 }
 
