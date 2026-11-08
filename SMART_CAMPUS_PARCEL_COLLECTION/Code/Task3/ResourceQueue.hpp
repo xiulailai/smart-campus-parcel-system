@@ -60,14 +60,24 @@ public:
 
 // ---------- Resource manager (holds both queues) ----------
 
+// Hooks let Main.cpp connect Task 3 to Task 2 without Task 3 knowing about Task 2
+typedef void (*RequestLostHook)(const std::string& requestID);     // a busy resource lost its request
+typedef bool (*BeforeReleaseHook)(const std::string& requestID);   // return false to stop the release
+
 class ResourceManager {
 private:
     ResourceQueue counterQueue;    // collection counters (C01, C02, ...)
     ResourceQueue deliveryQueue;   // delivery personnel (D01, D02, ...)
+    RequestLostHook requestLostHook;
+    BeforeReleaseHook beforeReleaseHook;
 
     ResourceQueue* queueForType(const std::string& type);
 
 public:
+    ResourceManager();
+    void setRequestLostHook(RequestLostHook hook);
+    void setBeforeReleaseHook(BeforeReleaseHook hook);
+
     // Requirement 1: register and maintain resources
     bool loadFromCSV(const std::string& filename);
     bool saveToCSV(const std::string& filename) const;
@@ -77,8 +87,10 @@ public:
     void displayAll() const;
 
     // Requirement 3: assign a request to an available resource
-    // serviceType comes from requests.csv (Collection, CampusDelivery, ...)
     bool assignRequest(const std::string& requestID, const std::string& serviceType);
+    // Same, but the staff member picks the resource (rejects Unavailable / Occupied ones)
+    bool assignToResource(const std::string& requestID, const std::string& serviceType,
+        const std::string& resourceID);
 
     // Requirement 4: update resource status
     bool releaseResource(const std::string& resourceID, std::string* releasedRequest = 0);
@@ -87,6 +99,8 @@ public:
     // Helpers other modules may need
     Resource* findResource(const std::string& resourceID);
     bool isRequestAssigned(const std::string& requestID);
+    int resourceCount() const;               // counters + delivery
+    Resource* resourceAt(int index);         // 0 .. resourceCount()-1
 };
 
 // Simple console menu for Task 3 (call this from the main menu)
