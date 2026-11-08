@@ -1,6 +1,7 @@
 #include "Task1/ParcelIntake.hpp"
 #include "Task2/ServiceRequest.hpp"
 #include "Task3/ResourceQueue.hpp"
+#include "Task5/ParcelCategoryTree.hpp"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -172,6 +173,9 @@ int main() {
     ResourceManager manager;                            // Task 3
     manager.loadFromCSV(resourcesPath);
 
+    ParcelCategoryModule parcelCategories(parcelsPath, requestsPath); // Task 5
+    parcelCategories.load();
+
     // Connect Task 3 to Task 2
     g_service = &service;
     manager.setRequestLostHook(onRequestLost);
@@ -188,6 +192,7 @@ int main() {
             << "  4. Assign a resource to the next request (Task 2 + Task 3)\n"
             << "  5. Sort the next parcel and open its request (Task 1 + Task 2)\n"
             << "  6. Assign the next request to a resource I choose (Task 2 + Task 3)\n"
+            << "  7. Task 5 - Parcel category organisation (BST)\n"
             << "  0. Exit\n"
             << "----------------------------------------------\n"
             << "Enter choice: ";
@@ -207,6 +212,8 @@ int main() {
             break;
         case 6: assignNextRequest(service, manager, resourcesPath, true);
             break;
+        case 7: parcelCategories.run();
+        break;
         case 0:
             break;
         default: std::cout << "Invalid choice.\n";
