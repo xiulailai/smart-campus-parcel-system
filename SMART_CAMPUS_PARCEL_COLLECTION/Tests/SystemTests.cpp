@@ -968,6 +968,15 @@ static void task5_insertUpdateRemove() {
         { Console c("5\nP027\n6\n2026-02-31 10:00\n0\n"); cat.run(); out = c.text(); }
         CHECK_MSG(field(fx.parcels, "P027", 6) != "2026-02-31 10:00",
             "arrival date must be a real date", "Task 5 saved 31 February");
+        { Console c("5\nP027\n6\n2024-02-29 10:00\n0\n"); cat.run(); out = c.text(); }
+        CHECK(field(fx.parcels, "P027", 6) == "2024-02-29 10:00", "a leap day is accepted");
+        { Console c("5\nP027\n1\nJ0hn\n0\n"); cat.run(); out = c.text(); }
+        CHECK(field(fx.parcels, "P027", 1) == "Nur Sofea", "recipient name update follows Task 1's name rule");
+        { Console c("5\nP027\n1\nBob Tan\n0\n"); cat.run(); out = c.text(); }
+        CHECK(field(fx.parcels, "P027", 1) == "Nur Sofea",
+            "renaming P027 is refused while P003 still has TP012347 under Nur Sofea");
+        { Console c("5\nP027\n2\ntp999999\n0\n"); cat.run(); out = c.text(); }
+        CHECK(field(fx.parcels, "P027", 2) == "TP999999", "a new valid recipient ID is accepted and stored in upper case");
     }
     {
         Fixture fx("t5_remove");

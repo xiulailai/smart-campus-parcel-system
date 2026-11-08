@@ -58,12 +58,16 @@ namespace {
         const int digitPositions[] = { 0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15 };
         for (int i = 0; i < 12; i++)
             if (!std::isdigit(static_cast<unsigned char>(value[digitPositions[i]]))) return false;
+        int year = std::atoi(value.substr(0, 4).c_str());
         int month = (value[5] - '0') * 10 + value[6] - '0';
         int day = (value[8] - '0') * 10 + value[9] - '0';
         int hour = (value[11] - '0') * 10 + value[12] - '0';
         int minute = (value[14] - '0') * 10 + value[15] - '0';
-        return month >= 1 && month <= 12 && day >= 1 && day <= 31
-            && hour <= 23 && minute <= 59;
+        if (month < 1 || month > 12 || hour > 23 || minute > 59) return false;
+        const int daysInMonth[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+        bool leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+        int maxDay = daysInMonth[month - 1] + ((month == 2 && leap) ? 1 : 0);
+        return day >= 1 && day <= maxDay;
     }
 
     // Converts parcel type input to the canonical labels used by parcels.csv.
@@ -78,12 +82,57 @@ namespace {
         return true;
     }
 
-    // Returns true only for a status already understood by the other modules.
-    bool knownParcelStatus(std::string status) {
-        const char* values[] = { "Registered", "ReadyForCollection", "AssignedForDelivery",
-            "SpecialHandling", "ReturnToSender", "OnHold", "Missing", "Collected",
-            "Delivered", "Returned", "Cancelled" };
-        for (int i = 0; i < 11; i++) if (status == values[i]) return true;
+    std::string upperText(std::string value) {
+        for (std::size_t i = 0; i < value.size(); i++)
+            value[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(value[i])));
+        return value;
+    }
+
+    std::string lowerText(std::string value) {
+        for (std::size_t i = 0; i < value.size(); i++)
+            value[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(value[i])));
+        return value;
+    }
+
+    // Same recipient ID rule as Task 1: TP + 6 digits (student) or STAFF + 3 digits (staff).
+    bool validRecipientID(const std::string& id) {
+        std::size_t digitsFrom;
+        if (id.size() == 8 && id.compare(0, 2, "TP") == 0) digitsFrom = 2;
+        else if (id.size() == 8 && id.compare(0, 5, "STAFF") == 0) digitsFrom = 5;
+        else return false;
+        for (std::size_t i = digitsFrom; i < id.size(); i++)
+            if (!std::isdigit(static_cast<unsigned char>(id[i]))) return false;
+        return true;
+    }
+
+    // Same recipient name rule as Task 1: 2-40 characters, letters, spaces, ' - . only.
+    bool validRecipientName(const std::string& name) {
+        if (name.size() < 2 || name.size() > 40) return false;
+        int letters = 0;
+        for (std::size_t i = 0; i < name.size(); i++) {
+            unsigned char c = static_cast<unsigned char>(name[i]);
+            if (std::isalpha(c)) letters++;
+            else if (c != ' ' && c != '\'' && c != '-' && c != '.') return false;
+        }
+        return letters >= 2;
+    }
+
+    // Finds another parcel in the file whose recipient ID is the same but whose
+    // name is different (one recipient ID belongs to one person, as in Task 1).
+    bool recipientIDOwnedByOther(const std::string& path, const Parcel& updated, Parcel& other) {
+        std::ifstream input(path.c_str());
+        std::string line;
+        std::getline(input, line);                       // header row
+        while (std::getline(input, line)) {
+            Parcel parcel;
+            if (!splitParcelRow(line, parcel)) continue;
+            if (upperText(parcel.parcelID) == upperText(updated.parcelID)) continue;
+            if (upperText(parcel.recipientID) == updated.recipientID
+                && lowerText(parcel.recipientName) != lowerText(updated.recipientName)) {
+                other = parcel;
+                return true;
+            }
+        }
         return false;
     }
 
@@ -513,13 +562,20 @@ void ParcelCategoryModule::menuUpdate() {
     else if (field == 5) prompt = "New courier (Example: Pos Laju / J&T / DHL / Ninja Van / Flash Express / Shopee Xpress): ";
     std::string value = readLine(prompt);
     Parcel updated = original;
-    if (field == 1 && validCsvField(value, 60)) updated.recipientName = value;
-    else if (field == 2 && validCsvField(value, 20)) updated.recipientID = value;
+    if (field == 1 && validRecipientName(value)) updated.recipientName = value;
+    else if (field == 2 && validRecipientID(upperText(value))) updated.recipientID = upperText(value);
     else if (field == 3 && validCsvField(value, 40)) updated.deliveryInfo = value;
     else if (field == 4 && canonicalParcelType(value, updated.parcelType)) {}
     else if (field == 5 && validCsvField(value, 40)) updated.courier = value;
     else if (field == 6 && validTimestamp(value)) updated.arrivalDateTime = value;
     else { std::cout << "[Error] Invalid value for the selected field.\n"; return; }
+
+    Parcel other;
+    if ((field == 1 || field == 2) && recipientIDOwnedByOther(parcelsPath, updated, other)) {
+        std::cout << "[Error] Recipient ID " << updated.recipientID << " belongs to '"
+            << other.recipientName << "' (see parcel " << other.parcelID << ").\n";
+        return;
+    }
 
     if (!removeParcelFromTree(original.parcelID) || !insertIntoTree(updated)) {
         reload(false);
