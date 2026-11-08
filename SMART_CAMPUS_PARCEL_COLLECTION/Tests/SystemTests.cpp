@@ -754,6 +754,31 @@ static void task3_menuWithTask2() {
             "R001 is a Collection request, so it must not go to a delivery person",
             "typing the wrong service type put R001 on " + holder + " and Task 2 still marked it Assigned");
     }
+    {
+        Fixture fx("t3_menu3");
+        ServiceModule sm(fx.requests, fx.parcels);
+        sm.load();
+        ResourceManager rm;
+        rm.loadFromCSV(fx.resources);
+        ServiceRequest r;
+        { Console c("3\nr001\ncollection\n0\n"); runTask3Menu(rm, &sm); }
+        std::string holder = holderOf(rm, "R001");
+        CHECK(!holder.empty() && holder[0] == 'C' && sm.findRequest("R001", r) && r.status == STATUS_ASSIGNED,
+            "option 3 with the right service type still assigns a counter and Task 2 marks it Assigned");
+        { Console c("7\nR009\nCollection\nC04\n0\n"); runTask3Menu(rm, &sm); }
+        CHECK(holderOf(rm, "R009").empty() && sm.findRequest("R009", r) && r.status == STATUS_PENDING,
+            "option 7 refuses a service type that is not the request's own");
+        { Console c("7\nR009\nCampusDelivery\nD04\n0\n"); runTask3Menu(rm, &sm); }
+        CHECK(holderOf(rm, "R009") == "D04" && sm.findRequest("R009", r) && r.status == STATUS_ASSIGNED,
+            "option 7 with the right type assigns the chosen delivery person");
+    }
+    {
+        Fixture fx("t3_menu4");
+        ResourceManager rm;
+        rm.loadFromCSV(fx.resources);
+        { Console c("3\nR001\nCampusDelivery\n0\n"); runTask3Menu(rm, nullptr); }
+        CHECK(holderOf(rm, "R001") == "D04", "without Task 2 connected, the menu still assigns by the typed type");
+    }
 }
 
 // ============================================================================
@@ -943,6 +968,15 @@ static void task5_insertUpdateRemove() {
         { Console c("5\nP027\n6\n2026-02-31 10:00\n0\n"); cat.run(); out = c.text(); }
         CHECK_MSG(field(fx.parcels, "P027", 6) != "2026-02-31 10:00",
             "arrival date must be a real date", "Task 5 saved 31 February");
+        { Console c("5\nP027\n6\n2024-02-29 10:00\n0\n"); cat.run(); out = c.text(); }
+        CHECK(field(fx.parcels, "P027", 6) == "2024-02-29 10:00", "a leap day is accepted");
+        { Console c("5\nP027\n1\nJ0hn\n0\n"); cat.run(); out = c.text(); }
+        CHECK(field(fx.parcels, "P027", 1) == "Nur Sofea", "recipient name update follows Task 1's name rule");
+        { Console c("5\nP027\n1\nBob Tan\n0\n"); cat.run(); out = c.text(); }
+        CHECK(field(fx.parcels, "P027", 1) == "Nur Sofea",
+            "renaming P027 is refused while P003 still has TP012347 under Nur Sofea");
+        { Console c("5\nP027\n2\ntp999999\n0\n"); cat.run(); out = c.text(); }
+        CHECK(field(fx.parcels, "P027", 2) == "TP999999", "a new valid recipient ID is accepted and stored in upper case");
     }
     {
         Fixture fx("t5_remove");

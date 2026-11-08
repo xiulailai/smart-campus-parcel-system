@@ -48,10 +48,40 @@ namespace {
 
     int readChoice(const std::string& prompt) {
         std::string line = readLine(prompt);
+        if (!std::cin) return 0;            // input ended: leave the menu
         if (line.empty()) return -1;
         for (size_t i = 0; i < line.size(); i++)
             if (!std::isdigit((unsigned char)line[i])) return -1;
         return std::atoi(line.c_str());
+    }
+
+    // With Task 2 connected, check the request BEFORE a resource is taken:
+    // it must still be assignable, and the typed service type must be its own.
+    bool requestReady(ServiceModule* service, const std::string& requestID,
+        const std::string& serviceType) {
+        if (service == nullptr) return true;
+        std::string msg;
+        if (!service->validateForAssignment(requestID, msg)) {
+            std::cout << "Error: " << msg << "\n";
+            return false;
+        }
+        ServiceRequest r;
+        service->findRequest(requestID, r);
+        if (toUpper(trim(serviceType)) != toUpper(r.serviceType)) {
+            std::cout << "Error: " << r.requestID << " is a " << r.serviceType
+                << " request, not " << trim(serviceType) << ".\n";
+            return false;
+        }
+        return true;
+    }
+
+    // Frees a resource again if Task 2 refused the assignment
+    void undoAllocation(ResourceManager& manager, const std::string& resourceID) {
+        Resource* r = manager.findResource(resourceID);
+        if (r == nullptr) return;
+        r->status = AVAILABLE;
+        r->currentAssignment = "NONE";
+        std::cout << r->resourceID << " is Available again.\n";
     }
 
 }
@@ -533,13 +563,16 @@ void runTask3Menu(ResourceManager& manager, ServiceModule* service) {
             std::string serviceType = readLine(
                 "Service type (Collection / SpecialHandling / Return / CampusDelivery / ReDelivery): ");
             std::string assignedResourceID;
-            if (manager.assignRequest(requestID, serviceType, &assignedResourceID)) {
+            if (requestReady(service, requestID, serviceType) &&
+                manager.assignRequest(requestID, serviceType, &assignedResourceID)) {
                 if (service != nullptr) {
                     std::string msg;
                     if (service->markAssigned(requestID, assignedResourceID, msg))
                         std::cout << "[Task 2] " << msg << "\n";
-                    else
+                    else {
                         std::cout << "[Warning] " << msg << "\n";
+                        undoAllocation(manager, assignedResourceID);
+                    }
                 }
             }
         }
@@ -568,13 +601,16 @@ void runTask3Menu(ResourceManager& manager, ServiceModule* service) {
                 "Service type (Collection / SpecialHandling / Return / CampusDelivery / ReDelivery): ");
             std::string resourceID = readLine("Resource ID to use (e.g. C01 or D02): ");
             std::string assignedResourceID;
-            if (manager.assignToResource(requestID, serviceType, resourceID, &assignedResourceID)) {
+            if (requestReady(service, requestID, serviceType) &&
+                manager.assignToResource(requestID, serviceType, resourceID, &assignedResourceID)) {
                 if (service != nullptr) {
                     std::string msg;
                     if (service->markAssigned(requestID, assignedResourceID, msg))
                         std::cout << "[Task 2] " << msg << "\n";
-                    else
+                    else {
                         std::cout << "[Warning] " << msg << "\n";
+                        undoAllocation(manager, assignedResourceID);
+                    }
                 }
             }
         }
