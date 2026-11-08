@@ -58,19 +58,12 @@
 #define ACTIVITY_LOG_HPP
 
 #include <string>
+#include "../ActivityHook.hpp"   // ACT_* constants + ActivityEvent + ActivityHook
 
 // ---------------------------------------------------------- activity types
-const std::string ACT_REGISTERED = "Registered";           // parcel arrived
-const std::string ACT_SORTED = "Sorted";                   // routed to its next action
-const std::string ACT_STATUS_UPDATED = "StatusUpdated";    // status changed by staff
-const std::string ACT_INFO_UPDATED = "InfoUpdated";        // delivery info changed
-const std::string ACT_MISSING = "Missing";                 // reported missing
-const std::string ACT_REMOVED = "Removed";                 // parcel record removed
-const std::string ACT_REQUEST_CREATED = "RequestCreated";  // service request opened
-const std::string ACT_ASSIGNED = "Assigned";               // request given a resource
-const std::string ACT_COMPLETED = "Completed";             // request finished
-const std::string ACT_CANCELLED = "Cancelled";             // parcel or request cancelled
-const std::string ACT_UNDONE = "Undone";                   // an earlier activity was reversed
+// The ACT_* constants and the ActivityEvent / ActivityHook declarations
+// live in ActivityHook.hpp so that Tasks 1/2/3 can include that tiny file
+// instead of pulling in the whole ActivityLog module.
 
 bool isKnownActivityType(const std::string& type);
 bool isUndoableActivityType(const std::string& type);

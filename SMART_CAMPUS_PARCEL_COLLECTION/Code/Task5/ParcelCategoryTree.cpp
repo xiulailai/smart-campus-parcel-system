@@ -103,7 +103,7 @@ namespace {
 ParcelCategoryModule::ParcelCategoryModule(const std::string& parcelsFile,
     const std::string& requestsFile)
     : root(nullptr), organisationKey(ParcelTreeKey::ParcelID),
-    parcelsPath(parcelsFile), requestsPath(requestsFile) {
+    parcelsPath(parcelsFile), requestsPath(requestsFile), parcels(nullptr) {
 }
 
 // Frees all tree storage when the Task 5 module is destroyed.
@@ -409,47 +409,47 @@ void ParcelCategoryModule::menuSelectKey() {
     }
 }
 
-// Validates and inserts a new Registered parcel into parcels.csv.
+// ---------------------------------------------------------------------------
+// CHANGED (Fix 2): insert now delegates to Task 1's registerParcel(), so every
+// registration rule is enforced in ONE place:
+//   - recipient name / ID format
+//   - same recipient ID must map to the same person
+//   - duplicate parcel rejection (courier + type + delivery + arrival)
+//   - no future arrival date/time
+//   - Parcel ID = highest existing + 1
+//   - publishes ACT_REGISTERED through the Task 4 hook
+// ---------------------------------------------------------------------------
 void ParcelCategoryModule::menuInsert() {
     if (!reload(false)) { std::cout << "[Error] Cannot insert until parcels.csv is readable.\n"; return; }
-    Parcel parcel;
-    parcel.recipientName = readLine("Recipient name: ");
-    parcel.recipientID = readLine("Recipient ID (Example: TP012345 / STAFF021): ");
-    parcel.deliveryInfo = readLine("Delivery information (Example: Counter / Block A L3 / Admin Office): ");
-    std::string typeInput = readLine("Parcel type (Standard / Fragile / Urgent / Oversized): ");
-    parcel.courier = readLine("Courier (Example: Pos Laju / J&T / DHL / Ninja Van / Flash Express / Shopee Xpress): ");
-    parcel.arrivalDateTime = readLine("Arrival date/time (YYYY-MM-DD HH:MM): ");
-    if (!validCsvField(parcel.recipientName, 60) || !validCsvField(parcel.recipientID, 20)
-        || !validCsvField(parcel.deliveryInfo, 40) || !validCsvField(parcel.courier, 40)
-        || !validTimestamp(parcel.arrivalDateTime)
-        || !canonicalParcelType(typeInput, parcel.parcelType)) {
-        std::cout << "[Error] Invalid information. Fields must be non-empty, fit their limits, "
-            "contain no commas, and use a supported parcel type.\n";
+
+    if (parcels == nullptr) {
+        std::cout << "[Error] Task 5 is not connected to the parcel module; "
+            "insertion is unavailable.\n";
         return;
     }
-    parcel.parcelID = "P001";
-    int highest = 0;
-    for (int i = 1; ; i++) {
-        std::ostringstream candidate;
-        candidate << 'P';
-        if (i < 1000) { candidate.width(3); candidate.fill('0'); }
-        candidate << i;
-        Parcel found;
-        if (!findParcelByID(candidate.str(), found)) { highest = i - 1; break; }
-    }
-    std::ostringstream newID;
-    newID << 'P';
-    if (highest + 1 < 1000) { newID.width(3); newID.fill('0'); }
-    newID << highest + 1;
-    parcel.parcelID = newID.str();
-    parcel.status = PARCEL_REGISTERED;
-    if (!insertIntoTree(parcel)) { std::cout << "[Error] Could not insert parcel into the BST.\n"; return; }
-    if (!save()) {
-        reload(false);
-        std::cout << "[Error] Could not save parcels.csv; insertion was not kept.\n";
+
+    Parcel input;
+    input.recipientName = readLine("Recipient name: ");
+    input.recipientID = readLine("Recipient ID (Example: TP012345 / STAFF021): ");
+    input.deliveryInfo = readLine(
+        "Delivery information (Example: Counter / Block A L3 / Admin Office): ");
+    input.parcelType = readLine(
+        "Parcel type (Standard / Fragile / Urgent / Oversized): ");
+    input.courier = readLine(
+        "Courier (Example: Pos Laju / J&T / DHL / Ninja Van / Flash Express / Shopee Xpress): ");
+    input.arrivalDateTime = readLine(
+        "Arrival date/time (YYYY-MM-DD HH:MM, Enter = now): ");
+    // parcelID and status are assigned by Task 1 (nextID / "Registered").
+
+    std::string newID, msg;
+    if (!parcels->registerParcel(input, newID, msg)) {
+        std::cout << "[Error] " << msg << "\n";
         return;
     }
-    std::cout << "[OK] Parcel " << parcel.parcelID << " inserted as Registered.\n";
+
+    // Task 1 has already written parcels.csv; reload so the new row is in the tree.
+    reload(false);
+    std::cout << "[OK] " << msg << "\n";
 }
 
 // Searches by Parcel ID or by the current organisation key.

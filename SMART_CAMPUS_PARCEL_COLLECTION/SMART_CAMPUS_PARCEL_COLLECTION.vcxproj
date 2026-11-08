@@ -147,6 +147,7 @@
     <ClCompile Include="Code\Task5\ParcelCategoryTree.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Code\ActivityHook.hpp" />
     <ClInclude Include="Code\Task1\ParcelIntake.hpp" />
     <ClInclude Include="Code\Task2\ServiceRequest.hpp" />
     <ClInclude Include="Code\Task3\ResourceQueue.hpp" />

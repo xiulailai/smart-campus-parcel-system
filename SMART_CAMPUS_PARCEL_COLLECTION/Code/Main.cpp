@@ -3,11 +3,11 @@
 #include "Task3/ResourceQueue.hpp"
 #include "Task4/ActivityLog.hpp"
 #include "Task5/ParcelCategoryTree.hpp"
+#include "ActivityHook.hpp"
 #include <fstream>
 #include <iostream>
 #include <string>
 
-// Looks for a data file in a few likely places and returns the first one that opens
 std::string findDataFile(const std::string& fileName) {
     const char* folders[] = { "Data\\", "..\\Data\\", "..\\..\\Data\\", "..\\..\\..\\Data\\" };
     for (int i = 0; i < 4; i++) {
@@ -15,18 +15,14 @@ std::string findDataFile(const std::string& fileName) {
         std::ifstream test(path.c_str());
         if (test.is_open()) return path;
     }
-    return fileName;   // not found: loadFromCSV will show the error
+    return fileName;
 }
 
-// Lets the Task 3 hooks below reach the Task 2 module
+// ---------------------------------------------------------------------------
+// Task 3 <-> Task 2 hooks
+// ---------------------------------------------------------------------------
 static ServiceModule* g_service = 0;
 
-// ---------------------------------------------------------------------------
-// Task 3 -> Task 2 hooks
-// ---------------------------------------------------------------------------
-
-// A busy resource lost its request (it became Unavailable, or was switched to
-// Available by hand). The request goes back to Pending so it can be re-assigned.
 void onRequestLost(const std::string& requestID) {
     ServiceRequest r;
     if (g_service == 0 || !g_service->findRequest(requestID, r)) return;
@@ -36,12 +32,10 @@ void onRequestLost(const std::string& requestID) {
     std::cout << "[Task 2] " << msg << "\n";
 }
 
-// Called just before Task 3 releases a resource. Releasing means the job is
-// finished, so Task 2 completes the request first. Returning false cancels the release.
 bool beforeRelease(const std::string& requestID) {
     ServiceRequest r;
     if (g_service == 0 || !g_service->findRequest(requestID, r)) return true;
-    if (r.status != STATUS_ASSIGNED) return true;   // already Completed / Cancelled: nothing to close
+    if (r.status != STATUS_ASSIGNED) return true;
 
     std::string collector, msg;
     if (r.serviceType == SERVICE_COLLECTION) {
@@ -53,8 +47,22 @@ bool beforeRelease(const std::string& requestID) {
     return ok;
 }
 
-// Task 2 -> Task 3: after the Task 2 menu, free every resource whose request is
-// now Completed or Cancelled.
+// ---------------------------------------------------------------------------
+// Task 4 bridge — Tasks 1/2/3 only see the raw function pointer, not
+// ActivityModule, so no circular dependency.
+// ---------------------------------------------------------------------------
+static ActivityModule* g_activity = nullptr;
+
+static void activityBridge(const ActivityEvent& e) {
+    if (g_activity == nullptr) return;
+    g_activity->logActivity(e.parcelID, e.activityType,
+        e.oldStatus, e.newStatus,
+        e.requestID, e.resourceID);
+}
+
+// ---------------------------------------------------------------------------
+// Free every resource whose request is now Completed or Cancelled
+// ---------------------------------------------------------------------------
 void releaseFinishedResources(ServiceModule& service, ResourceManager& resources,
     const std::string& resourcesPath) {
     bool changed = false;
@@ -73,13 +81,7 @@ void releaseFinishedResources(ServiceModule& service, ResourceManager& resources
 }
 
 // ---------------------------------------------------------------------------
-// Integrated flow (system steps 2-4).  Task 1 sorts, Task 2 opens the service:
-//   1. Task 1 shows the parcel at the front of the intake queue, suggests a
-//      route and staff confirm it                            (sortNextParcel)
-//   2. Task 1 updates the parcel status and removes it from the queue
-//   3. If the new status needs a service, Task 2 creates the matching
-//      Pending request, ready for option 4 to give it a resource (createRequest)
-// On-hold parcels wait for staff, so no request is made.
+// Integrated flow (system steps 2-4)
 // ---------------------------------------------------------------------------
 std::string serviceForSortedParcel(const std::string& parcelStatus) {
     if (parcelStatus == PARCEL_READY_FOR_COLLECTION) return SERVICE_COLLECTION;
@@ -91,52 +93,29 @@ std::string serviceForSortedParcel(const std::string& parcelStatus) {
 
 void sortAndRequestNext(ParcelModule& parcels, ServiceModule& service) {
     Parcel p;
-    if (!parcels.sortNextParcel(p)) return;          // Task 1 already said why
+    if (!parcels.sortNextParcel(p)) return;
 
     std::string serviceType = serviceForSortedParcel(p.status);
     if (serviceType.empty()) {
-        std::cout << "[Info] " << p.parcelID << " is " << p.status << ": no service request needed now.\n";
+        std::cout << "[Info] " << p.parcelID << " is " << p.status
+            << ": no service request needed now.\n";
         return;
     }
     std::string msg;
     int urgency = parcels.suggestedUrgency(p);
     if (service.createRequest(p.parcelID, p.recipientID, serviceType, urgency, msg))
-        std::cout << "[OK] " << msg << " Urgency " << urgency << " (" << p.parcelType << " parcel).\n";
+        std::cout << "[OK] " << msg << " Urgency " << urgency
+        << " (" << p.parcelType << " parcel).\n";
     else
         std::cout << "[Info] No new request: " << msg << "\n";
 }
 
-// Task 4: records an assignment in the activity log. Only Main.cpp knows the
-// request, the resource that took it and the parcel's status before and after.
-void logAssignment(ParcelModule& parcels, ResourceManager& resources, ActivityModule& activities,
-    const ServiceRequest& r, const std::string& oldStatus) {
-    Parcel after;
-    if (!parcels.findParcel(r.parcelID, after)) return;
-    std::string resourceID = "-";
-    for (int i = 0; i < resources.resourceCount(); i++) {      // the resource now holding it
-        Resource* res = resources.resourceAt(i);
-        if (res != 0 && res->status == OCCUPIED && res->currentAssignment == r.requestID) {
-            resourceID = res->resourceID;
-            break;
-        }
-    }
-    if (!activities.logActivity(r.parcelID, ACT_ASSIGNED, oldStatus.empty() ? after.status : oldStatus,
-        after.status, r.requestID, resourceID))
-        std::cout << "[Warning] " << activities.lastError() << "\n";
-}
-
 // ---------------------------------------------------------------------------
-// Integrated flow (system steps 5-7).  Task 2 decides, Task 3 allocates:
-//   1. Task 2 says which Pending request is the most urgent      (peekNext)
-//   2. Task 2 checks the request can be assigned right now       (validateForAssignment)
-//   3. Task 3 allocates a resource: automatically (round-robin) or the one the
-//      staff member chooses                       (assignRequest / assignToResource)
-//   4. Task 2 marks the request Assigned and saves requests.csv  (markAssigned)
-// If nobody is free in step 3 nothing changes: the request simply stays Pending.
+// Integrated flow (system steps 5-7).  Task 4 logging now happens inside
+// Task 2::markAssigned(), so this function only orchestrates.
 // ---------------------------------------------------------------------------
 void assignNextRequest(ServiceModule& service, ResourceManager& resources,
-    const std::string& resourcesPath, bool chooseResource,
-    ParcelModule& parcels, ActivityModule& activities) {
+    const std::string& resourcesPath, bool chooseResource) {
     ServiceRequest r;
     std::string msg;
     if (!service.peekNext(r)) {
@@ -150,29 +129,27 @@ void assignNextRequest(ServiceModule& service, ResourceManager& resources,
         std::cout << "[Error] " << msg << "\n";
         return;
     }
+
+    std::string resourceID;
     bool allocated;
     if (chooseResource) {
-        std::string resourceID;
+        std::string typed;
         std::cout << "Resource ID to use (e.g. C01 or D02): ";
-        std::getline(std::cin, resourceID);
-        allocated = resources.assignToResource(r.requestID, r.serviceType, resourceID);
+        std::getline(std::cin, typed);
+        allocated = resources.assignToResource(r.requestID, r.serviceType,
+            typed, &resourceID);
     }
     else {
-        allocated = resources.assignRequest(r.requestID, r.serviceType);
+        allocated = resources.assignRequest(r.requestID, r.serviceType, &resourceID);
     }
     if (!allocated) {
         std::cout << "[Info] " << r.requestID << " stays Pending.\n";
         return;
     }
-    resources.saveToCSV(resourcesPath);              // keep resources.csv in step
+    resources.saveToCSV(resourcesPath);
 
-    Parcel before;                                   // Task 4: parcel status before the assignment
-    std::string oldParcelStatus = parcels.findParcel(r.parcelID, before) ? before.status : "";
-
-    if (service.markAssigned(r.requestID, msg)) {
+    if (service.markAssigned(r.requestID, resourceID, msg))     // NEW arg
         std::cout << "[OK] " << msg << "\n";
-        logAssignment(parcels, resources, activities, r, oldParcelStatus);   // Task 4
-    }
     else
         std::cout << "[Warning] Resource allocated but request not updated: " << msg << "\n";
 }
@@ -180,7 +157,7 @@ void assignNextRequest(ServiceModule& service, ResourceManager& resources,
 int readMenuChoice() {
     std::string s;
     std::getline(std::cin, s);
-    if (!std::cin) return 0;                         // end of input = exit
+    if (!std::cin) return 0;
     if (s.size() == 1 && s[0] >= 0x30 && s[0] <= 0x39) return s[0] - 0x30;
     return -1;
 }
@@ -191,26 +168,32 @@ int main() {
     std::string resourcesPath = findDataFile("resources.csv");
     std::string activitiesPath = findDataFile("activities.csv");
 
-    ParcelModule parcels(parcelsPath, requestsPath);    // Task 1
+    ParcelModule parcels(parcelsPath, requestsPath);
     parcels.load();
 
-    ServiceModule service(requestsPath, parcelsPath);   // Task 2
+    ServiceModule service(requestsPath, parcelsPath);
     service.load();
 
-    ResourceManager manager;                            // Task 3
+    ResourceManager manager;
     manager.loadFromCSV(resourcesPath);
 
-    ParcelCategoryModule parcelCategories(parcelsPath, requestsPath); // Task 5
+    ParcelCategoryModule parcelCategories(parcelsPath, requestsPath);
     parcelCategories.load();
+    parcelCategories.setParcelModule(&parcels);
 
     // Connect Task 3 to Task 2
     g_service = &service;
     manager.setRequestLostHook(onRequestLost);
     manager.setBeforeReleaseHook(beforeRelease);
 
-    ActivityModule activities(activitiesPath);          // Task 4
+    ActivityModule activities(activitiesPath);
     activities.load();
-    activities.connect(&parcels, &service, &manager, resourcesPath);   // lets undo reach Tasks 1-3
+    activities.connect(&parcels, &service, &manager, resourcesPath);
+
+    // Connect Task 1 and Task 2 to Task 4 through the bridge
+    g_activity = &activities;
+    parcels.setActivityHook(activityBridge);
+    service.setActivityHook(activityBridge);
 
     int choice;
     do {
@@ -236,21 +219,29 @@ int main() {
             service.run();
             releaseFinishedResources(service, manager, resourcesPath);
             break;
-        case 3: runTask3Menu(manager);
+        case 3:
+            runTask3Menu(manager, &service);
+            manager.saveToCSV(resourcesPath);   // persist Task 3 menu changes
             break;
-        case 4: assignNextRequest(service, manager, resourcesPath, false, parcels, activities);
+        case 4:
+            assignNextRequest(service, manager, resourcesPath, false);
             break;
-        case 5: sortAndRequestNext(parcels, service);
+        case 5:
+            sortAndRequestNext(parcels, service);
             break;
-        case 6: assignNextRequest(service, manager, resourcesPath, true, parcels, activities);
+        case 6:
+            assignNextRequest(service, manager, resourcesPath, true);
             break;
-        case 7: parcelCategories.run();
-        break;
-        case 8: activities.run();
+        case 7:
+            parcelCategories.run();
+            break;
+        case 8:
+            activities.run();
             break;
         case 0:
             break;
-        default: std::cout << "Invalid choice.\n";
+        default:
+            std::cout << "Invalid choice.\n";
             break;
         }
     } while (choice != 0);

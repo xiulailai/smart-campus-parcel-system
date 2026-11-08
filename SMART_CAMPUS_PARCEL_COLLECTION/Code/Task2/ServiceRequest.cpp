@@ -3,16 +3,13 @@
 // Task 2 - Parcel Service and Collection Management Module
 // ============================================================================
 #ifndef _CRT_SECURE_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS     // lets Visual Studio accept localtime()
+#define _CRT_SECURE_NO_WARNINGS
 #endif
 
 #include "ServiceRequest.hpp"
 #include <cctype>
 #include <cstdlib>
 
-// ============================================================================
-//  Small helpers
-// ============================================================================
 static const int SERVICE_TYPE_COUNT = 5;
 static const string SERVICE_TYPES[SERVICE_TYPE_COUNT] = {
     SERVICE_COLLECTION, SERVICE_CAMPUS_DELIVERY, SERVICE_SPECIAL_HANDLING,
@@ -34,7 +31,6 @@ static string toUpper(string s)
     return s;
 }
 
-// Accepts an optional sign followed by 1-9 digits only.
 static bool parseInt(const string& s, int& out)
 {
     size_t i = 0;
@@ -47,8 +43,6 @@ static bool parseInt(const string& s, int& out)
     return true;
 }
 
-// Splits a CSV line on commas into fields[] (at most maxFields stored).
-// Returns the REAL number of fields so callers can detect malformed rows.
 static int splitCSV(const string& line, string fields[], int maxFields)
 {
     int n = 0;
@@ -68,7 +62,7 @@ static int splitCSV(const string& line, string fields[], int maxFields)
     return n;
 }
 
-static string fit(const string& s, size_t width)   // truncate for table columns
+static string fit(const string& s, size_t width)
 {
     return s.size() > width ? s.substr(0, width) : s;
 }
@@ -94,11 +88,6 @@ static bool isValidStatus(const string& s)
     return s == STATUS_PENDING || s == STATUS_ASSIGNED || s == STATUS_COMPLETED || s == STATUS_CANCELLED;
 }
 
-// ---- Business rules shared with Task 1 (agree on these with the team) ------
-
-// Which parcel statuses allow a given service to be requested / processed.
-// Terminal parcel statuses (Collected, Delivered, Returned, Cancelled, Missing)
-// are never allowed, which blocks "processing an already completed parcel".
 static bool parcelAllowsService(const string& service, const string& parcelStatus)
 {
     bool registered = (parcelStatus == "Registered");
@@ -115,17 +104,15 @@ static bool parcelAllowsService(const string& service, const string& parcelStatu
     return false;
 }
 
-// Parcel status after a request of this type is COMPLETED.
 static string parcelStatusAfterCompletion(const string& service)
 {
     if (service == SERVICE_COLLECTION)       return "Collected";
     if (service == SERVICE_CAMPUS_DELIVERY)  return "Delivered";
     if (service == SERVICE_REDELIVERY)       return "Delivered";
     if (service == SERVICE_RETURN)           return "Returned";
-    return "ReadyForCollection";             // SpecialHandling finished
+    return "ReadyForCollection";
 }
 
-// Parcel status change when a request becomes ASSIGNED ("" = no change).
 static string parcelStatusOnAssignment(const string& service)
 {
     if (service == SERVICE_CAMPUS_DELIVERY || service == SERVICE_REDELIVERY)
@@ -139,7 +126,6 @@ static string parcelStatusOnAssignment(const string& service)
 //  RequestStore
 // ============================================================================
 RequestStore::RequestStore() : items(nullptr), count(0), capacity(0) {}
-
 RequestStore::~RequestStore() { delete[] items; }
 
 void RequestStore::grow()
@@ -191,22 +177,20 @@ string RequestStore::nextID() const
 }
 
 // ============================================================================
-//  RequestQueue  (priority queue: array in arrival order, as taught in lecture)
+//  RequestQueue
 // ============================================================================
 RequestQueue::RequestQueue(const RequestStore* s)
     : store(s), arr(nullptr), count(0), capacity(0) {
 }
-
 RequestQueue::~RequestQueue() { delete[] arr; }
 
-// The priority rule lives here, in ONE place.
 bool RequestQueue::higher(int a, int b) const
 {
     const ServiceRequest& x = store->at(a);
     const ServiceRequest& y = store->at(b);
-    if (x.urgency != y.urgency)         return x.urgency > y.urgency;         // 1
-    if (x.requestTime != y.requestTime) return x.requestTime < y.requestTime; // 2
-    if (x.requestID.size() != y.requestID.size())                             // 3
+    if (x.urgency != y.urgency)         return x.urgency > y.urgency;
+    if (x.requestTime != y.requestTime) return x.requestTime < y.requestTime;
+    if (x.requestID.size() != y.requestID.size())
         return x.requestID.size() < y.requestID.size();
     return x.requestID < y.requestID;
 }
@@ -221,14 +205,12 @@ void RequestQueue::grow()
     capacity = newCap;
 }
 
-// enqueue: add at the rear in arrival order, NO sorting -> O(1)
 void RequestQueue::enqueue(int storeIndex)
 {
     if (count == capacity) grow();
     arr[count++] = storeIndex;
 }
 
-// Scan EVERY item for the highest-priority one -> O(n)
 int RequestQueue::findTopPos() const
 {
     if (count == 0) return -1;
@@ -247,11 +229,10 @@ int RequestQueue::peek() const
 void RequestQueue::removeAt(int pos)
 {
     for (int i = pos; i < count - 1; i++)
-        arr[i] = arr[i + 1];                       // shift the rest left
+        arr[i] = arr[i + 1];
     count--;
 }
 
-// dequeue: scan all, find highest priority, remove it -> O(n)
 int RequestQueue::dequeue()
 {
     int pos = findTopPos();
@@ -261,7 +242,6 @@ int RequestQueue::dequeue()
     return result;
 }
 
-// Cancelling a request that is not at the top: find it, then shift -> O(n)
 bool RequestQueue::remove(int storeIndex)
 {
     for (int i = 0; i < count; i++)
@@ -269,8 +249,6 @@ bool RequestQueue::remove(int storeIndex)
     return false;
 }
 
-// Priority order for display: repeatedly pick the best item from a COPY
-// (selection style, O(n^2)) so the real queue is never disturbed.
 void RequestQueue::snapshotSorted(int* out) const
 {
     int n = count;
@@ -290,10 +268,9 @@ void RequestQueue::snapshotSorted(int* out) const
 }
 
 // ============================================================================
-//  ParcelTable  (reads / rewrites parcels.csv)
+//  ParcelTable
 // ============================================================================
 ParcelTable::ParcelTable() : items(nullptr), count(0), capacity(0) {}
-
 ParcelTable::~ParcelTable() { delete[] items; }
 
 void ParcelTable::grow()
@@ -321,7 +298,7 @@ bool ParcelTable::load(const string& file)
         if (header) { header = false; continue; }
         line = trim(line);
         if (line.empty()) continue;
-        if (splitCSV(line, f, 8) != 8) continue;   // skip malformed rows
+        if (splitCSV(line, f, 8) != 8) continue;
 
         if (count == capacity) grow();
         ParcelRecord p;
@@ -354,7 +331,7 @@ int ParcelTable::find(const string& parcelID) const
 }
 
 // ============================================================================
-//  Console input / output helpers
+//  Console helpers
 // ============================================================================
 static string readLine(const string& prompt)
 {
@@ -364,8 +341,6 @@ static string readLine(const string& prompt)
     return trim(s);
 }
 
-// Re-asks until a whole number in [lo, hi] is typed. At end of input it
-// returns lo (menu choice 0 = exit) so the program can never loop forever.
 static int readInt(const string& prompt, int lo, int hi)
 {
     while (true)
@@ -393,7 +368,6 @@ static void printTableHeader()
         << string(112, '-') << "\n";
 }
 
-// parcels may be nullptr (parcels.csv unreadable) - recipient columns show "-"
 static void printTableRow(int no, const ServiceRequest& r, const ParcelTable* parcels)
 {
     string name = "-", info = "-";
@@ -422,7 +396,6 @@ ServiceModule::ServiceModule(const string& requestsFile, const string& parcelsFi
     : store(), pendingQueue(&store), requestsPath(requestsFile), parcelsPath(parcelsFile) {
 }
 
-// Validates one CSV row of requests.csv. Bad rows are skipped, never crash.
 static bool parseRequestRow(const string& line, ServiceRequest& r, string& reason)
 {
     string f[6];
@@ -458,7 +431,7 @@ bool ServiceModule::load()
     while (getline(in, line))
     {
         lineNo++;
-        if (lineNo == 1) continue;                 // header row
+        if (lineNo == 1) continue;
         line = trim(line);
         if (line.empty()) continue;
 
@@ -470,14 +443,14 @@ bool ServiceModule::load()
             skipped++;
             continue;
         }
-        if (store.findByID(r.requestID) >= 0)      // duplicate Request ID
+        if (store.findByID(r.requestID) >= 0)
         {
             cout << "[Skipped] line " << lineNo << ": duplicate Request ID " << r.requestID << "\n";
             skipped++;
             continue;
         }
         int idx = store.add(r);
-        if (r.status == STATUS_PENDING) pendingQueue.enqueue(idx);   // only Pending is queued
+        if (r.status == STATUS_PENDING) pendingQueue.enqueue(idx);
         loaded++;
     }
     cout << "Loaded " << loaded << " request(s), " << pendingQueue.size()
@@ -504,8 +477,6 @@ void ServiceModule::persist(string& msg) const
     if (!save()) msg += " [Warning: could not write " + requestsPath + "]";
 }
 
-// Single place that changes a request's status; keeps the queue membership
-// rule true: "a request is in the queue if and only if it is Pending".
 void ServiceModule::applyStatus(int idx, const string& newStatus)
 {
     string old = store.at(idx).status;
@@ -515,7 +486,7 @@ void ServiceModule::applyStatus(int idx, const string& newStatus)
 }
 
 // ============================================================================
-//  ServiceModule - core operations (integration API)
+//  ServiceModule - core operations
 // ============================================================================
 bool ServiceModule::findRequest(const string& requestID, ServiceRequest& out) const
 {
@@ -533,7 +504,6 @@ bool ServiceModule::peekNext(ServiceRequest& out) const
     return true;
 }
 
-// Req 1: create a request (validation first, state change last)
 bool ServiceModule::createRequest(const string& parcelIDIn, const string& recipientIDIn,
     const string& serviceTypeIn, int urgency, string& msg)
 {
@@ -597,10 +567,12 @@ bool ServiceModule::createRequest(const string& parcelIDIn, const string& recipi
     pendingQueue.enqueue(idx);
     msg = "Request " + r.requestID + " created for parcel " + parcelID + " (Pending).";
     persist(msg);
+
+    publish(parcelID, ACT_REQUEST_CREATED, parcel.status, parcel.status, r.requestID); // NEW
+
     return true;
 }
 
-// Hand-over step 2: can this Pending request safely be given to a resource?
 bool ServiceModule::validateForAssignment(const string& requestID, string& msg) const
 {
     string id = toUpper(trim(requestID));
@@ -634,24 +606,28 @@ bool ServiceModule::validateForAssignment(const string& requestID, string& msg) 
     return true;
 }
 
-// Hand-over step 4: called AFTER a resource has been allocated (by Task 3).
-// Pending -> Assigned, the request leaves the priority queue, parcel updated.
-bool ServiceModule::markAssigned(const string& requestID, string& msg)
+// CHANGED: new 'resourceID' parameter and activity publish
+bool ServiceModule::markAssigned(const string& requestID, const string& resourceID, string& msg)
 {
     if (!validateForAssignment(requestID, msg)) return false;
 
     int idx = store.findByID(toUpper(trim(requestID)));
     ServiceRequest& r = store.at(idx);
 
-    // the parcel moves to its next stage (e.g. AssignedForDelivery)
+    // Capture the parcel status BEFORE anything changes (for the activity log)
+    string oldParcelStatus = "-";
+    ParcelTable parcels;
+    bool parcelsOk = parcels.load(parcelsPath);
+    if (parcelsOk) {
+        int p = parcels.find(r.parcelID);
+        if (p >= 0) oldParcelStatus = parcels.at(p).status;
+    }
+
+    // Existing logic — move the parcel to its next stage
     string newParcelStatus = parcelStatusOnAssignment(r.serviceType);
     if (!newParcelStatus.empty())
     {
-        ParcelTable parcels;
-        if (!parcels.load(parcelsPath))
-        {
-            msg = "Cannot read " + parcelsPath + ". Request not marked as assigned."; return false;
-        }
+        if (!parcelsOk) { msg = "Cannot read " + parcelsPath + ". Request not marked as assigned."; return false; }
         int p = parcels.find(r.parcelID);
         if (p >= 0 && parcels.at(p).status != newParcelStatus)
         {
@@ -662,14 +638,23 @@ bool ServiceModule::markAssigned(const string& requestID, string& msg)
             }
         }
     }
+    else {
+        // No parcel status change for this service (e.g. Collection, Return)
+        newParcelStatus = oldParcelStatus;
+    }
 
-    applyStatus(idx, STATUS_ASSIGNED);             // also removes it from the queue
+    applyStatus(idx, STATUS_ASSIGNED);
     msg = "Request " + r.requestID + " marked as Assigned (Pending -> Assigned).";
     persist(msg);
+
+    // Publish the Assigned activity with the resource that took it
+    if (oldParcelStatus != "-") {
+        publish(r.parcelID, ACT_ASSIGNED, oldParcelStatus, newParcelStatus,
+            r.requestID, resourceID);   // NEW
+    }
     return true;
 }
 
-// Req 4: complete an Assigned request and update the parcel
 bool ServiceModule::completeRequest(const string& requestID, const string& collectorID, string& msg)
 {
     string id = toUpper(trim(requestID));
@@ -699,7 +684,6 @@ bool ServiceModule::completeRequest(const string& requestID, const string& colle
             + "' and cannot be processed for " + r.serviceType + "."; return false;
     }
 
-    // Collection must be handed to the registered recipient
     if (r.serviceType == SERVICE_COLLECTION &&
         (trim(collectorID).empty() || toUpper(trim(collectorID)) != toUpper(parcel.recipientID)))
     {
@@ -707,19 +691,23 @@ bool ServiceModule::completeRequest(const string& requestID, const string& colle
         return false;
     }
 
+    string oldParcelStatus = parcel.status;                              // NEW
     parcel.status = parcelStatusAfterCompletion(r.serviceType);
+    string newParcelStatus = parcel.status;                              // NEW
     if (!parcels.save(parcelsPath))
     {
         msg = "Cannot update " + parcelsPath + ". Request not completed."; return false;
     }
 
-    r.status = STATUS_COMPLETED;                   // Assigned items are not in the queue
+    r.status = STATUS_COMPLETED;
     msg = "Request " + id + " completed. Parcel " + parcel.parcelID + " is now '" + parcel.status + "'.";
     persist(msg);
+
+    publish(r.parcelID, ACT_COMPLETED, oldParcelStatus, newParcelStatus, id);  // NEW
+
     return true;
 }
 
-// Req 2 + 5: cancel a Pending or Assigned request
 bool ServiceModule::cancelRequest(const string& requestID, string& msg)
 {
     string id = toUpper(trim(requestID));
@@ -732,30 +720,43 @@ bool ServiceModule::cancelRequest(const string& requestID, string& msg)
 
     bool wasAssigned = (r.status == STATUS_ASSIGNED);
 
-    // A cancelled delivery leaves the parcel waiting for a new decision
+    // Parcel-status tracking for the activity log (NEW)
+    string oldParcelStatus = "-";
+    string newParcelStatus = "-";
     string note;
     ParcelTable parcels;
     if (parcels.load(parcelsPath))
     {
         int p = parcels.find(r.parcelID);
-        if (p >= 0 && parcels.at(p).status == "AssignedForDelivery" &&
-            (r.serviceType == SERVICE_CAMPUS_DELIVERY || r.serviceType == SERVICE_REDELIVERY))
-        {
-            parcels.at(p).status = "OnHold";
-            if (parcels.save(parcelsPath)) note = " Parcel " + r.parcelID + " set to OnHold.";
+        if (p >= 0) {
+            oldParcelStatus = parcels.at(p).status;
+            newParcelStatus = oldParcelStatus;
+            if (parcels.at(p).status == "AssignedForDelivery" &&
+                (r.serviceType == SERVICE_CAMPUS_DELIVERY || r.serviceType == SERVICE_REDELIVERY))
+            {
+                parcels.at(p).status = "OnHold";
+                if (parcels.save(parcelsPath)) {
+                    newParcelStatus = "OnHold";
+                    note = " Parcel " + r.parcelID + " set to OnHold.";
+                }
+            }
         }
     }
 
-    applyStatus(idx, STATUS_CANCELLED);            // also removes it from the queue
+    applyStatus(idx, STATUS_CANCELLED);
     msg = "Request " + id + " cancelled." + note;
     if (wasAssigned) msg += " Release any resource assigned to it (Task 3).";
     persist(msg);
+
+    if (oldParcelStatus != "-" && newParcelStatus != "-")
+        publish(r.parcelID, ACT_CANCELLED, oldParcelStatus, newParcelStatus, id);  // NEW
+
     return true;
 }
 
-// Used by Task 4 (undo). Bypasses the normal flow but keeps the queue correct.
 bool ServiceModule::restoreRequestStatus(const string& requestID, const string& previousStatus, string& msg)
 {
+    // Called from Task 4 undo only — deliberately does NOT publish
     string id = toUpper(trim(requestID));
     int idx = store.findByID(id);
     if (idx < 0) { msg = "Request ID '" + id + "' does not exist."; return false; }
@@ -804,7 +805,7 @@ void ServiceModule::run()
         case 2: menuDisplayActive(); break;
         case 3: menuView();          break;
         case 4: menuNext();          break;
-        case 5: menuMarkAssigned();   break;
+        case 5: menuMarkAssigned();  break;
         case 6: menuComplete();      break;
         case 7: menuCancel();        break;
         case 8: menuDisplayAll();    break;
@@ -925,10 +926,13 @@ void ServiceModule::menuNext() const
 
 void ServiceModule::menuMarkAssigned()
 {
-    cout << "\n(Use this after a counter / delivery resource has been allocated in Task 3.)\n";
+    cout << "\nFor the fully integrated flow (allocate a resource AND mark the request\n"
+        << "as Assigned in one step), use Main menu option 4 or 6.\n";
     string id = toUpper(readLine("Request ID to mark as Assigned: "));
+    string resourceID = toUpper(readLine("Resource ID holding it (e.g. C01 or D02, '-' if unknown): "));
+    if (resourceID.empty()) resourceID = "-";
     string msg;
-    bool ok = markAssigned(id, msg);
+    bool ok = markAssigned(id, resourceID, msg);
     cout << (ok ? "[OK] " : "[Error] ") << msg << "\n";
 }
 
@@ -937,7 +941,6 @@ void ServiceModule::menuComplete()
     string id = toUpper(readLine("\nRequest ID to complete: "));
     ServiceRequest r;
     string collector;
-    // Only a Collection that is really in progress needs the ID check
     if (findRequest(id, r) && r.serviceType == SERVICE_COLLECTION && r.status == STATUS_ASSIGNED)
         collector = toUpper(readLine("Collector's Recipient ID (checked at the counter): "));
 

@@ -3,7 +3,7 @@
 // Task 1 - Parcel Intake, Sorting and Processing Module
 // ============================================================================
 #ifndef _CRT_SECURE_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS     // lets Visual Studio accept localtime()
+#define _CRT_SECURE_NO_WARNINGS
 #endif
 
 #include "ParcelIntake.hpp"
@@ -37,7 +37,7 @@ namespace {
         "J&T", "Pos Laju", "DHL", "Shopee Xpress", "Flash Express", "Ninja Van"
     };
 
-    const std::string COUNTER = "Counter";      // delivery info for counter collection
+    const std::string COUNTER = "Counter";
     const std::string CSV_HEADER =
         "ParcelID,RecipientName,RecipientID,DeliveryInfo,ParcelType,Courier,ArrivalDateTime,Status";
 
@@ -67,8 +67,6 @@ namespace {
         return true;
     }
 
-    // Splits a CSV line on commas into fields[] (at most maxFields stored).
-    // Returns the REAL number of fields so callers can detect malformed rows.
     int splitCSV(const std::string& line, std::string fields[], int maxFields) {
         int n = 0;
         std::string cur;
@@ -84,7 +82,7 @@ namespace {
         return n + 1;
     }
 
-    std::string fit(const std::string& s, size_t width) {   // truncate for table columns
+    std::string fit(const std::string& s, size_t width) {
         return s.size() > width ? s.substr(0, width) : s;
     }
 
@@ -96,33 +94,27 @@ namespace {
         return std::string(buf);
     }
 
-    // ---- validation --------------------------------------------------------
-
     bool isKnownStatus(const std::string& s) {
         for (int i = 0; i < STATUS_COUNT; i++)
             if (ALL_STATUSES[i] == s) return true;
         return false;
     }
 
-    // Completed parcels can never be processed again
     bool isCompletedStatus(const std::string& s) {
         return s == PARCEL_COLLECTED || s == PARCEL_DELIVERED ||
             s == PARCEL_RETURNED || s == PARCEL_CANCELLED;
     }
 
-    // "P" followed by 3 to 6 digits, e.g. P001, P1234
     bool isValidParcelID(const std::string& id) {
         return id.size() >= 4 && id.size() <= 7 && id[0] == 'P' && allDigits(id.substr(1));
     }
 
-    // Student: TP + 6 digits (TP012345). Staff: STAFF + 3 digits (STAFF021).
     bool isValidRecipientID(const std::string& id) {
         if (id.size() == 8 && id.compare(0, 2, "TP") == 0) return allDigits(id.substr(2));
         if (id.size() == 8 && id.compare(0, 5, "STAFF") == 0) return allDigits(id.substr(5));
         return false;
     }
 
-    // Letters, spaces, apostrophes, hyphens and dots; 2 to 40 characters.
     bool isValidName(const std::string& name) {
         if (name.size() < 2 || name.size() > 40) return false;
         int letters = 0;
@@ -134,8 +126,6 @@ namespace {
         return letters >= 2;
     }
 
-    // Free text that goes into the CSV: printable, no comma (it would split
-    // the field), not too long.
     bool isValidText(const std::string& s, size_t maxLen) {
         if (s.empty() || s.size() > maxLen) return false;
         for (size_t i = 0; i < s.size(); i++) {
@@ -157,13 +147,11 @@ namespace {
         return true;
     }
 
-    // "counter" in any case becomes "Counter"; anything else is a location
     std::string normaliseDeliveryInfo(const std::string& s) {
         std::string t = trim(s);
         return (toUpper(t) == "COUNTER") ? COUNTER : t;
     }
 
-    // Matches a parcel type ignoring case. Returns "" if it is not one of ours.
     std::string normaliseParcelType(const std::string& s) {
         std::string t = toUpper(trim(s));
         for (int i = 0; i < PARCEL_TYPE_COUNT; i++)
@@ -173,7 +161,6 @@ namespace {
 
     bool isLeapYear(int y) { return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0; }
 
-    // Strict "YYYY-MM-DD HH:MM" check with real calendar dates
     bool isValidDateTime(const std::string& s) {
         if (s.size() != 16 || s[4] != '-' || s[7] != '-' || s[10] != ' ' || s[13] != ':')
             return false;
@@ -193,32 +180,25 @@ namespace {
         return day >= 1 && day <= maxDay && hour <= 23 && minute <= 59;
     }
 
-    // ---- business rules ----------------------------------------------------
-
-    // Which status may follow 'from' when staff update a parcel by hand.
-    // (Registered parcels are routed through the intake queue instead.)
     bool isAllowedChange(const std::string& from, const std::string& to) {
         if (from == to || isCompletedStatus(from) || to == PARCEL_REGISTERED) return false;
-        if (from == PARCEL_MISSING) return to == PARCEL_ON_HOLD;          // found again
-        if (to == PARCEL_MISSING) return true;                              // any active parcel can go missing
-        if (from == PARCEL_REGISTERED) return to == PARCEL_CANCELLED;       // otherwise sort it first
+        if (from == PARCEL_MISSING) return to == PARCEL_ON_HOLD;
+        if (to == PARCEL_MISSING) return true;
+        if (from == PARCEL_REGISTERED) return to == PARCEL_CANCELLED;
         if (from == PARCEL_RETURN_TO_SENDER)
             return to == PARCEL_RETURNED || to == PARCEL_ON_HOLD;
-        if (to == PARCEL_RETURNED) return false;                            // only after ReturnToSender
+        if (to == PARCEL_RETURNED) return false;
         if (to == PARCEL_COLLECTED) return from == PARCEL_READY_FOR_COLLECTION;
         if (to == PARCEL_DELIVERED) return from == PARCEL_ASSIGNED_FOR_DELIVERY;
-        return true;   // between the sorted statuses, OnHold, ReturnToSender and Cancelled
+        return true;
     }
 
-    // Statuses where the delivery information can still change
     bool canChangeDelivery(const std::string& status) {
         return status == PARCEL_REGISTERED || status == PARCEL_READY_FOR_COLLECTION ||
             status == PARCEL_ASSIGNED_FOR_DELIVERY || status == PARCEL_SPECIAL_HANDLING ||
             status == PARCEL_ON_HOLD;
     }
 
-    // Route that keeps a Task 2 service request valid. A Return request is
-    // completed by Task 2 from OnHold, so the parcel is held until then.
     bool routeForService(const std::string& serviceType, ParcelRoute& route) {
         if (serviceType == "Collection") { route = ROUTE_COLLECTION; return true; }
         if (serviceType == "CampusDelivery" || serviceType == "ReDelivery") { route = ROUTE_DELIVERY; return true; }
@@ -227,8 +207,6 @@ namespace {
         return false;
     }
 
-    // ---- console input -----------------------------------------------------
-
     std::string readLine(const std::string& prompt) {
         std::cout << prompt;
         std::string s;
@@ -236,8 +214,6 @@ namespace {
         return trim(s);
     }
 
-    // Re-asks until a whole number in [lo, hi] is typed. At end of input it
-    // returns lo (0 = cancel / exit) so the program can never loop forever.
     int readInt(const std::string& prompt, int lo, int hi) {
         while (true) {
             std::string s = readLine(prompt);
@@ -250,7 +226,6 @@ namespace {
         }
     }
 
-    // Same as readInt, but pressing Enter picks 'def'
     int readIntDefault(const std::string& prompt, int lo, int hi, int def) {
         while (true) {
             std::string s = readLine(prompt);
@@ -268,8 +243,6 @@ namespace {
         std::string answer = readLine(prompt + " (y/n): ");
         return answer == "y" || answer == "Y";
     }
-
-    // ---- console output ----------------------------------------------------
 
     void printTableHeader() {
         std::cout << std::left
@@ -326,17 +299,14 @@ std::string parcelRouteLabel(ParcelRoute route) {
 }
 
 // ============================================================================
-//  ParcelStore  (dynamic array kept in Parcel ID order)
+//  ParcelStore
 // ============================================================================
-
-// Does Parcel ID a come before b? Shorter IDs first, so P999 comes before P1000.
 static bool idBefore(const std::string& a, const std::string& b) {
     if (a.size() != b.size()) return a.size() < b.size();
     return a < b;
 }
 
 ParcelStore::ParcelStore() : items(nullptr), count(0), capacity(0) {}
-
 ParcelStore::~ParcelStore() { delete[] items; }
 
 void ParcelStore::grow() {
@@ -348,20 +318,17 @@ void ParcelStore::grow() {
     capacity = newCap;
 }
 
-// Binary search: halve the search range each step -> O(log n)
 int ParcelStore::find(const std::string& parcelID) const {
     int low = 0, high = count - 1;
     while (low <= high) {
         int mid = low + (high - low) / 2;
         if (items[mid].parcelID == parcelID) return mid;
-        if (idBefore(items[mid].parcelID, parcelID)) low = mid + 1;   // target is to the right
-        else high = mid - 1;                                         // target is to the left
+        if (idBefore(items[mid].parcelID, parcelID)) low = mid + 1;
+        else high = mid - 1;
     }
     return -1;
 }
 
-// Binary search for the first slot whose ID is not smaller, then shift the
-// rest one place right. A new largest ID lands at the end with no shifting.
 int ParcelStore::insert(const Parcel& p) {
     int low = 0, high = count;
     while (low < high) {
@@ -369,7 +336,7 @@ int ParcelStore::insert(const Parcel& p) {
         if (idBefore(items[mid].parcelID, p.parcelID)) low = mid + 1;
         else high = mid;
     }
-    if (low < count && items[low].parcelID == p.parcelID) return -1;   // duplicate Parcel ID
+    if (low < count&& items[low].parcelID == p.parcelID) return -1;
 
     if (count == capacity) grow();
     for (int i = count; i > low; i--) items[i] = items[i - 1];
@@ -390,7 +357,6 @@ void ParcelStore::swapWith(ParcelStore& other) {
     int tCap = capacity; capacity = other.capacity; other.capacity = tCap;
 }
 
-// Next free ID = highest number in use + 1 (P041 after P040)
 std::string ParcelStore::nextID() const {
     int maxNum = 0;
     for (int i = 0; i < count; i++) {
@@ -403,30 +369,27 @@ std::string ParcelStore::nextID() const {
 }
 
 // ============================================================================
-//  IntakeQueue  (FIFO queue on a singly linked list)
+//  IntakeQueue
 // ============================================================================
 IntakeQueue::IntakeQueue() : front(nullptr), rear(nullptr), count(0) {}
-
 IntakeQueue::~IntakeQueue() { clear(); }
 
-// enqueue: link a new node after the rear -> O(1)
 void IntakeQueue::enqueue(const std::string& parcelID) {
     Node* node = new Node;
     node->parcelID = parcelID;
     node->next = nullptr;
-    if (rear == nullptr) front = node;    // queue was empty: node is also the front
+    if (rear == nullptr) front = node;
     else rear->next = node;
     rear = node;
     count++;
 }
 
-// dequeue: unlink the front node -> O(1)
 bool IntakeQueue::dequeue(std::string& parcelID) {
     if (front == nullptr) return false;
     Node* old = front;
     parcelID = old->parcelID;
     front = old->next;
-    if (front == nullptr) rear = nullptr; // queue is now empty
+    if (front == nullptr) rear = nullptr;
     delete old;
     count--;
     return true;
@@ -438,8 +401,6 @@ bool IntakeQueue::peek(std::string& parcelID) const {
     return true;
 }
 
-// remove: walk to the node, then link its neighbours together -> O(n).
-// Used only for exceptions (a waiting parcel is cancelled or goes missing).
 bool IntakeQueue::remove(const std::string& parcelID) {
     Node* prev = nullptr;
     Node* cur = front;
@@ -448,10 +409,9 @@ bool IntakeQueue::remove(const std::string& parcelID) {
         cur = cur->next;
     }
     if (cur == nullptr) return false;
-
-    if (prev == nullptr) front = cur->next;   // removing the front
+    if (prev == nullptr) front = cur->next;
     else prev->next = cur->next;
-    if (cur == rear) rear = prev;             // removing the rear
+    if (cur == rear) rear = prev;
     delete cur;
     count--;
     return true;
@@ -482,13 +442,12 @@ void IntakeQueue::clear() {
 }
 
 // ============================================================================
-//  ParcelModule - file I/O and keeping in step with the other modules
+//  ParcelModule - file I/O
 // ============================================================================
 ParcelModule::ParcelModule(const std::string& parcelsFile, const std::string& requestsFile)
     : parcelsPath(parcelsFile), requestsPath(requestsFile) {
 }
 
-// Checks one row of parcels.csv. Bad rows are skipped, never crash.
 static bool parseParcelRow(const std::string& line, Parcel& p, std::string& reason) {
     std::string f[8];
     if (splitCSV(line, f, 8) != 8) { reason = "expected 8 fields"; return false; }
@@ -515,7 +474,7 @@ bool ParcelModule::readFile(ParcelStore& into, bool verbose, int& loaded, int& s
     int lineNo = 0;
     while (std::getline(in, line)) {
         lineNo++;
-        if (lineNo == 1) continue;                 // header row
+        if (lineNo == 1) continue;
         line = trim(line);
         if (line.empty()) continue;
 
@@ -525,7 +484,7 @@ bool ParcelModule::readFile(ParcelStore& into, bool verbose, int& loaded, int& s
             skipped++;
             continue;
         }
-        if (into.insert(p) < 0) {                  // binary insertion rejects duplicates
+        if (into.insert(p) < 0) {
             if (verbose) std::cout << "[Skipped] parcels.csv line " << lineNo
                 << ": duplicate Parcel ID " << p.parcelID << "\n";
             skipped++;
@@ -536,8 +495,6 @@ bool ParcelModule::readFile(ParcelStore& into, bool verbose, int& loaded, int& s
     return true;
 }
 
-// Reads parcels.csv into memory and repairs the intake queue WITHOUT
-// changing its order. If the file cannot be read, memory is left as it is.
 bool ParcelModule::reload(bool verbose) {
     ParcelStore fresh;
     int loaded = 0, skipped = 0;
@@ -545,11 +502,7 @@ bool ParcelModule::reload(bool verbose) {
     store.swapWith(fresh);
 
     int n = store.size();
-    bool* queued = new bool[n > 0 ? n : 1]();   // queued[i]: parcel i is in the queue
-
-    // Step 1: one full rotation through the queue. Each parcel is dequeued
-    // and joins the rear again only if it still exists and is still
-    // Registered (Task 2 or another module may have moved it on).
+    bool* queued = new bool[n > 0 ? n : 1]();
     int waiting = intake.size();
     for (int i = 0; i < waiting; i++) {
         std::string id;
@@ -560,8 +513,6 @@ bool ParcelModule::reload(bool verbose) {
             intake.enqueue(id);
         }
     }
-    // Step 2: Registered parcels that are not queued yet (first load, or
-    // added from outside) join the rear in Parcel ID (= registration) order.
     for (int i = 0; i < n; i++)
         if (!queued[i] && store.at(i).status == PARCEL_REGISTERED)
             intake.enqueue(store.at(i).parcelID);
@@ -592,16 +543,12 @@ bool ParcelModule::save() const {
     return out.good();
 }
 
-// Every change is saved straight away. If the file cannot be written, the
-// change is dropped by re-reading the file, so memory never disagrees with it.
 bool ParcelModule::commit() {
     if (save()) return true;
     reload(false);
     return false;
 }
 
-// Looks in Task 2's requests.csv (read only) for a Pending or Assigned
-// request on this parcel. Columns: RequestID,ParcelID,ServiceType,Urgency,RequestTime,Status
 bool ParcelModule::findActiveRequest(const std::string& parcelID, std::string& requestID,
     std::string& serviceType, std::string& requestStatus) const {
     std::ifstream in(requestsPath.c_str());
@@ -625,8 +572,6 @@ bool ParcelModule::findActiveRequest(const std::string& parcelID, std::string& r
 // ============================================================================
 //  ParcelModule - core operations (integration API)
 // ============================================================================
-
-// Req 1: register a new parcel (validation first, state change last)
 bool ParcelModule::registerParcel(const Parcel& input, std::string& newID, std::string& msg) {
     Parcel p;
     p.recipientName = trim(input.recipientName);
@@ -637,14 +582,12 @@ bool ParcelModule::registerParcel(const Parcel& input, std::string& newID, std::
     p.arrivalDateTime = trim(input.arrivalDateTime);
     if (p.arrivalDateTime.empty()) p.arrivalDateTime = currentTimestamp();
 
-    // 1. Missing information
     if (p.recipientName.empty() || p.recipientID.empty() || p.deliveryInfo.empty() ||
         trim(input.parcelType).empty() || p.courier.empty()) {
         msg = "Incomplete registration: recipient name, recipient ID, delivery information, "
             "parcel type and courier are all required.";
         return false;
     }
-    // 2. Invalid information
     if (!checkRecipient(p.recipientName, p.recipientID, msg)) return false;
     if (!isValidText(p.deliveryInfo, 30)) {
         msg = "Invalid delivery information '" + p.deliveryInfo + "' (max 30 characters, no commas).";
@@ -669,9 +612,6 @@ bool ParcelModule::registerParcel(const Parcel& input, std::string& newID, std::
 
     sync();
 
-    // 3. One linear pass over the records:
-    //    - a recipient ID must always belong to the same person
-    //    - the same parcel must not be registered twice (scanned twice)
     for (int i = 0; i < store.size(); i++) {
         const Parcel& old = store.at(i);
         if (old.recipientID != p.recipientID) continue;
@@ -689,16 +629,18 @@ bool ParcelModule::registerParcel(const Parcel& input, std::string& newID, std::
     }
 
     p.parcelID = store.nextID();
-    p.status = PARCEL_REGISTERED;                   // initial status
-    if (store.insert(p) < 0) {                      // safety net, should never happen
+    p.status = PARCEL_REGISTERED;
+    if (store.insert(p) < 0) {
         msg = "Duplicate Parcel ID " + p.parcelID + ". Parcel not registered.";
         return false;
     }
-    intake.enqueue(p.parcelID);                     // joins the rear of the intake queue
+    intake.enqueue(p.parcelID);
     if (!commit()) {
         msg = "Cannot write " + parcelsPath + ". Parcel not registered.";
         return false;
     }
+
+    publish(p.parcelID, ACT_REGISTERED, "-", PARCEL_REGISTERED);      // NEW
 
     newID = p.parcelID;
     msg = "Parcel " + p.parcelID + " registered (Registered). It is number "
@@ -706,7 +648,6 @@ bool ParcelModule::registerParcel(const Parcel& input, std::string& newID, std::
     return true;
 }
 
-// Req 2: locate a parcel by ID (binary search)
 bool ParcelModule::findParcel(const std::string& parcelID, Parcel& out) {
     sync();
     int idx = store.find(toUpper(trim(parcelID)));
@@ -720,16 +661,14 @@ int ParcelModule::waitingCount() {
     return intake.size();
 }
 
-// Req 3: the parcel at the front of the intake queue (queue unchanged)
 bool ParcelModule::peekNextParcel(Parcel& out) {
     sync();
     std::string id;
     if (!intake.peek(id)) return false;
-    out = store.at(store.find(id));    // sync() guarantees every queued ID exists
+    out = store.at(store.find(id));
     return true;
 }
 
-// The sorting rule, in ONE place
 ParcelRoute ParcelModule::suggestRoute(const Parcel& p, std::string& reason) const {
     std::string requestID, serviceType, requestStatus;
     ParcelRoute route;
@@ -750,8 +689,6 @@ ParcelRoute ParcelModule::suggestRoute(const Parcel& p, std::string& reason) con
     return ROUTE_DELIVERY;
 }
 
-// Req 3: dequeue the front parcel and route it. 'expectedID' guards against
-// the front having changed since staff looked at it ("" = no check).
 bool ParcelModule::processNextParcel(const std::string& expectedID, ParcelRoute route,
     Parcel& sorted, std::string& msg) {
     if ((int)route < 0 || (int)route >= ROUTE_COUNT) {
@@ -772,19 +709,20 @@ bool ParcelModule::processNextParcel(const std::string& expectedID, ParcelRoute 
     }
 
     int idx = store.find(id);
-    intake.dequeue(id);                             // O(1): leaves the queue
+    intake.dequeue(id);
     std::string newStatus = parcelRouteStatus(route);
-    store.at(idx).status = newStatus;               // Registered -> next stage
+    store.at(idx).status = newStatus;
     if (!commit()) {
         msg = "Cannot write " + parcelsPath + ". Parcel " + id + " not sorted.";
         return false;
     }
     sorted = store.at(idx);
 
+    publish(id, ACT_SORTED, PARCEL_REGISTERED, newStatus);           // NEW
+
     msg = "Parcel " + id + " sorted for " + parcelRouteLabel(route) + ": Registered -> "
         + newStatus + ". " + std::to_string(intake.size()) + " parcel(s) still waiting.";
 
-    // Warn if an existing Task 2 request no longer fits the chosen route
     std::string requestID, serviceType, requestStatus;
     ParcelRoute expectedRoute;
     if (findActiveRequest(id, requestID, serviceType, requestStatus) &&
@@ -800,9 +738,8 @@ int ParcelModule::suggestedUrgency(const Parcel& p) const {
     return 1;
 }
 
-// Req 4: change the status by hand, following the allowed transitions
 bool ParcelModule::updateStatus(const std::string& parcelID, const std::string& newStatusIn,
-    std::string& msg) {
+    std::string& msg, const std::string& activityType) {
     std::string id = toUpper(trim(parcelID));
     std::string newStatus = trim(newStatusIn);
     if (id.empty()) { msg = "Please enter a Parcel ID."; return false; }
@@ -829,7 +766,6 @@ bool ParcelModule::updateStatus(const std::string& parcelID, const std::string& 
         return false;
     }
 
-    // Keep Task 2 in step: a parcel with an active request is finished there
     std::string requestID, serviceType, requestStatus, note;
     if (findActiveRequest(id, requestID, serviceType, requestStatus)) {
         if (newStatus == PARCEL_COLLECTED || newStatus == PARCEL_DELIVERED || newStatus == PARCEL_RETURNED) {
@@ -841,9 +777,11 @@ bool ParcelModule::updateStatus(const std::string& parcelID, const std::string& 
             + ") is still active - review it in Task 2.";
     }
 
-    if (oldStatus == PARCEL_REGISTERED) intake.remove(id);   // keeps the queue invariant
+    if (oldStatus == PARCEL_REGISTERED) intake.remove(id);
     p.status = newStatus;
     if (!commit()) { msg = "Cannot write " + parcelsPath + ". Status not changed."; return false; }
+
+    publish(id, activityType, oldStatus, newStatus);                 // NEW
 
     msg = "Parcel " + id + ": " + oldStatus + " -> " + newStatus + "." + note;
     return true;
@@ -872,6 +810,8 @@ bool ParcelModule::updateDeliveryInfo(const std::string& parcelID, const std::st
     p.deliveryInfo = newInfo;
     if (!commit()) { msg = "Cannot write " + parcelsPath + ". Delivery information not changed."; return false; }
 
+    publish(id, ACT_INFO_UPDATED, p.status, p.status);               // NEW
+
     msg = "Parcel " + id + " delivery information: '" + oldInfo + "' -> '" + newInfo + "'.";
     if (p.status == PARCEL_READY_FOR_COLLECTION && newInfo != COUNTER)
         msg += " Change its status to AssignedForDelivery if it should now be delivered.";
@@ -880,14 +820,10 @@ bool ParcelModule::updateDeliveryInfo(const std::string& parcelID, const std::st
     return true;
 }
 
-// Exception: a parcel is reported missing (it leaves the queue if waiting)
 bool ParcelModule::reportMissing(const std::string& parcelID, std::string& msg) {
-    return updateStatus(parcelID, PARCEL_MISSING, msg);
+    return updateStatus(parcelID, PARCEL_MISSING, msg, ACT_MISSING); // NEW: pass Missing
 }
 
-// Removing deletes the record, so it is only allowed for a parcel that was
-// registered by mistake (still Registered) or is Cancelled, and that no
-// active Task 2 request still points at.
 bool ParcelModule::removeParcel(const std::string& parcelID, std::string& msg) {
     std::string id = toUpper(trim(parcelID));
     sync();
@@ -910,13 +846,17 @@ bool ParcelModule::removeParcel(const std::string& parcelID, std::string& msg) {
     if (status == PARCEL_REGISTERED) intake.remove(id);
     store.removeAt(idx);
     if (!commit()) { msg = "Cannot write " + parcelsPath + ". Parcel not removed."; return false; }
+
+    publish(id, ACT_REMOVED, status, status);                        // NEW
+
     msg = "Parcel " + id + " removed.";
     return true;
 }
 
-// For Task 4 (undo). Bypasses the transition rules but keeps the queue right.
 bool ParcelModule::restoreParcelStatus(const std::string& parcelID, const std::string& previousStatus,
     std::string& msg) {
+    // Called from Task 4 undo only — deliberately does NOT publish a new
+    // activity here, because undoLatest() logs ACT_UNDONE itself.
     std::string id = toUpper(trim(parcelID));
     sync();
     int idx = store.find(id);
@@ -935,7 +875,7 @@ bool ParcelModule::restoreParcelStatus(const std::string& parcelID, const std::s
 }
 
 // ============================================================================
-//  ParcelModule - menu (console I/O)
+//  ParcelModule - menu (console I/O) — identical to original
 // ============================================================================
 void ParcelModule::showMenu() const {
     std::cout << "\n==============================================================\n"
@@ -958,7 +898,7 @@ void ParcelModule::showMenu() const {
 void ParcelModule::run() {
     int choice;
     do {
-        sync();                            // pick up changes made by other modules
+        sync();
         showMenu();
         choice = readInt("Enter choice: ", 0, 10);
         switch (choice) {
@@ -1002,7 +942,7 @@ void ParcelModule::menuRegister() {
         std::cout << "[Error] Incomplete registration: recipient name and ID are required.\n";
         return;
     }
-    if (!checkRecipient(in.recipientName, in.recipientID, msg)) {   // fail early, before more questions
+    if (!checkRecipient(in.recipientName, in.recipientID, msg)) {
         std::cout << "[Error] " << msg << "\n";
         return;
     }
@@ -1062,7 +1002,7 @@ void ParcelModule::menuDisplay() {
     if (shown == 0) { std::cout << "\n[Info] No parcels with status " << filter << ".\n"; return; }
 
     std::cout << shown << " parcel(s).\n";
-    if (filter.empty()) {                       // summary line: count per status
+    if (filter.empty()) {
         std::cout << "By status:";
         for (int s = 0; s < STATUS_COUNT; s++) {
             int n = 0;
@@ -1082,7 +1022,7 @@ void ParcelModule::menuSearch() {
     int mode = readInt("Choose (1-3, 0 = cancel): ", 0, 3);
     if (mode == 0) return;
 
-    if (mode == 1) {                            // binary search on the sorted store
+    if (mode == 1) {
         std::string id = toUpper(readLine("Parcel ID: "));
         int idx = store.find(id);
         if (idx < 0) { std::cout << "[Info] Parcel " << id << " does not exist.\n"; return; }
@@ -1095,7 +1035,7 @@ void ParcelModule::menuSearch() {
         : toLower(readLine("Recipient name: "));
     if (key.empty()) { std::cout << "[Error] Please enter something to search for.\n"; return; }
 
-    int found = 0;                              // linear search: not the sort key
+    int found = 0;
     for (int i = 0; i < store.size(); i++) {
         const Parcel& p = store.at(i);
         bool match = (mode == 2) ? (p.recipientID == key)
@@ -1153,7 +1093,6 @@ void ParcelModule::menuSort() {
         std::cout << "[Info] Create its service request in Task 2 when it is needed.\n";
 }
 
-// Shared by the Task 1 menu and Main.cpp's integrated option
 bool ParcelModule::sortNextParcel(Parcel& sorted) {
     Parcel p;
     if (!peekNextParcel(p)) {
@@ -1197,7 +1136,6 @@ void ParcelModule::menuUpdateStatus() {
         return;
     }
 
-    // List only the statuses this parcel may move to
     std::string options[STATUS_COUNT];
     int n = 0;
     for (int i = 0; i < STATUS_COUNT; i++)

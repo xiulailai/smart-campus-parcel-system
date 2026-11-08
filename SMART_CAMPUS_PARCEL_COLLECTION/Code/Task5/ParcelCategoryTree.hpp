@@ -15,8 +15,13 @@ Deleting a parcel from a key's record chain is O(k) (k is number of parcels in s
 Deleting an empty tree node is O(h).
 
 Error prevention:
-parcels.csv is reloaded before operations and saved after changes, so Task 5 sees statuses written by Tasks 1 and 2. 
+parcels.csv is reloaded before operations and saved after changes, so Task 5 sees statuses written by Tasks 1 and 2.
 requests.csv is read to protect active requests and to avoid removing parcels still in use.
+
+Insertion goes through Task 1 (ParcelModule::registerParcel) so every
+registration rule – recipient ID format, duplicate names, duplicate
+parcels, future arrivals – is enforced by ONE place. If Main does not
+call setParcelModule(), Task 5 refuses to insert and says why.
 */
 
 #ifndef PARCEL_CATEGORY_TREE_HPP
@@ -52,6 +57,7 @@ private:
     ParcelTreeKey organisationKey;
     std::string parcelsPath;
     std::string requestsPath;
+    ParcelModule* parcels = nullptr;   // NEW: Task 1, used by menuInsert only
 
     // Recursively deletes every tree node and its parcel chain.
     void destroy(TreeNode* node);
@@ -112,6 +118,9 @@ public:
     ~ParcelCategoryModule();
     ParcelCategoryModule(const ParcelCategoryModule&) = delete;
     ParcelCategoryModule& operator=(const ParcelCategoryModule&) = delete;
+
+    // NEW: Main.cpp wires Task 1 in here so menuInsert can reuse registerParcel().
+    void setParcelModule(ParcelModule* module) { parcels = module; }
 
     // Loads the parcel CSV into the BST and reports the load result.
     bool load();
