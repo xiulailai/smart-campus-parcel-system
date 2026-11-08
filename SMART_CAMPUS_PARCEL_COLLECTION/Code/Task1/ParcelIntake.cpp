@@ -203,7 +203,7 @@ namespace {
         if (serviceType == "Collection") { route = ROUTE_COLLECTION; return true; }
         if (serviceType == "CampusDelivery" || serviceType == "ReDelivery") { route = ROUTE_DELIVERY; return true; }
         if (serviceType == "SpecialHandling") { route = ROUTE_SPECIAL_HANDLING; return true; }
-        if (serviceType == "Return") { route = ROUTE_HOLD; return true; }
+        if (serviceType == "Return") { route = ROUTE_RETURN; return true; }
         return false;
     }
 
@@ -1089,7 +1089,7 @@ void ParcelModule::menuDisplayQueue() {
 
 void ParcelModule::menuSort() {
     Parcel sorted;
-    if (sortNextParcel(sorted) && sorted.status != PARCEL_RETURN_TO_SENDER && sorted.status != PARCEL_ON_HOLD)
+    if (sortNextParcel(sorted) && sorted.status != PARCEL_ON_HOLD)
         std::cout << "[Info] Create its service request in Task 2 when it is needed.\n";
 }
 
