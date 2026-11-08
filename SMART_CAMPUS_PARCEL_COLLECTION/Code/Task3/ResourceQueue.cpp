@@ -210,6 +210,26 @@ ResourceQueue* ResourceManager::queueForType(const std::string& type) {
     return 0;
 }
 
+ResourceManager::ResourceManager() {
+    requestLostHook = 0;
+    beforeReleaseHook = 0;
+}
+
+void ResourceManager::setRequestLostHook(RequestLostHook hook) { requestLostHook = hook; }
+void ResourceManager::setBeforeReleaseHook(BeforeReleaseHook hook) { beforeReleaseHook = hook; }
+
+// resourceCount / resourceAt: let other modules walk through every resource
+// (counters first, then delivery staff) without touching the queues.
+int ResourceManager::resourceCount() const {
+    return counterQueue.size() + deliveryQueue.size();
+}
+
+Resource* ResourceManager::resourceAt(int index) {
+    if (index < 0) return 0;
+    if (index < counterQueue.size()) return counterQueue.at(index);
+    return deliveryQueue.at(index - counterQueue.size());   // at() returns 0 if out of range
+}
+
 // findResource: looks for an ID in the counter queue first, then in the
 // delivery queue. Returns a pointer to the real record, so the caller can
 // update it directly, or 0 if the ID does not exist anywhere.
@@ -483,6 +503,56 @@ bool ResourceManager::assignRequest(const std::string& requestIDInput,
     return false;
 }
 
+// assignToResource: the staff member chooses the resource. Every check that
+// assignRequest does still applies, plus the chosen resource must exist, be the
+// right type, and be Available. This is where "selection of an unavailable
+// resource" is rejected.
+bool ResourceManager::assignToResource(const std::string& requestIDInput,
+    const std::string& serviceType,
+    const std::string& resourceIDInput) {
+    std::string requestID = toUpper(trim(requestIDInput));
+
+    if (requestID.empty() || requestID == "NONE") {
+        std::cout << "Error: invalid Request ID.\n";
+        return false;
+    }
+    std::string neededType = serviceToResourceType(serviceType);
+    if (neededType.empty()) {
+        std::cout << "Error: unknown service type '" << serviceType << "'.\n";
+        return false;
+    }
+    if (isRequestAssigned(requestID)) {
+        std::cout << "Error: " << requestID << " is already assigned to a resource.\n";
+        return false;
+    }
+
+    Resource* r = findResource(resourceIDInput);
+    if (r == 0) {
+        std::cout << "Error: resource ID '" << trim(resourceIDInput) << "' not found.\n";
+        return false;
+    }
+    if (r->type != neededType) {
+        std::cout << "Error: " << r->resourceID << " is a " << r->type
+            << " but this request needs a " << neededType << ".\n";
+        return false;
+    }
+    if (r->status == UNAVAILABLE) {
+        std::cout << "Error: " << r->resourceID << " is unavailable and cannot be selected.\n";
+        return false;
+    }
+    if (r->status == OCCUPIED) {
+        std::cout << "Error: " << r->resourceID << " is already occupied with "
+            << r->currentAssignment << ".\n";
+        return false;
+    }
+
+    r->status = OCCUPIED;
+    r->currentAssignment = requestID;
+    std::cout << "Request " << requestID << " assigned to "
+        << r->resourceID << " (" << r->name << ").\n";
+    return true;
+}
+
 // Requirement 4: update status
 
 // releaseResource: frees a resource when its job is done. It only works on
@@ -501,11 +571,20 @@ bool ResourceManager::releaseResource(const std::string& resourceID,
         return false;
     }
 
-    if (releasedRequest != 0) *releasedRequest = r->currentAssignment;
-    std::cout << r->resourceID << " released from " << r->currentAssignment << ".\n";
+    std::string finishedRequest = r->currentAssignment;
+
+    // Ask Task 2 to complete the request first. If it refuses (for example a wrong
+    // collector ID), the resource stays Occupied so both modules stay consistent.
+    if (beforeReleaseHook != 0 && !beforeReleaseHook(finishedRequest)) {
+        std::cout << r->resourceID << " not released: " << finishedRequest
+            << " is not completed.\n";
+        return false;
+    }
+
+    if (releasedRequest != 0) *releasedRequest = finishedRequest;
+    std::cout << r->resourceID << " released from " << finishedRequest << ".\n";
     r->status = AVAILABLE;
     r->currentAssignment = "NONE";   // status and assignment always change together
-    // TODO (integration): Task 2 marks the request Completed, Task 4 logs this
     return true;
 }
 
@@ -533,19 +612,21 @@ bool ResourceManager::updateResourceStatus(const std::string& resourceID,
         return false;
     }
 
-    // A busy resource is changing status: clear what it was working on
+    // A busy resource is changing status, so it no longer holds its request
+    std::string lostRequest;
     if (r->status == OCCUPIED) {
-        std::string lostRequest = r->currentAssignment;
+        lostRequest = r->currentAssignment;
         r->currentAssignment = "NONE";
-        if (newStatus == UNAVAILABLE) {
-            std::cout << "Warning: " << r->resourceID << " became unavailable while handling "
-                << lostRequest << ". That request needs a new resource.\n";
-            // TODO (integration): tell Task 2 to set this request back to "Pending"
-        }
+        std::cout << "Warning: " << r->resourceID << " was handling " << lostRequest
+            << ". That request needs a new resource.\n";
     }
 
     r->status = newStatus;
     std::cout << r->resourceID << " is now " << statusToString(newStatus) << ".\n";
+
+    // Tell Task 2 (through the hook) so the request goes back to Pending
+    if (!lostRequest.empty() && requestLostHook != 0)
+        requestLostHook(lostRequest);
     return true;
 }
 
@@ -565,6 +646,7 @@ void runTask3Menu(ResourceManager& manager) {
             << "4. Release a resource\n"
             << "5. Update resource status\n"
             << "6. Save resources to file\n"
+            << "7. Assign a request to a chosen resource\n"
             << "0. Back\n";
         choice = readChoice("Choice: ");
 
@@ -611,6 +693,12 @@ void runTask3Menu(ResourceManager& manager) {
         else if (choice == 6) {
             std::string path = readLine("Save to file (e.g. ..\\Data\\resources_saved.csv): ");
             if (manager.saveToCSV(path)) std::cout << "Saved.\n";
+        }
+        else if (choice == 7) {
+            std::string requestID = readLine("Request ID: ");
+            std::string service = readLine("Service type (Collection / SpecialHandling / Return / CampusDelivery / ReDelivery): ");
+            std::string resourceID = readLine("Resource ID to use (e.g. C01 or D02): ");
+            manager.assignToResource(requestID, service, resourceID);
         }
         else if (choice != 0) {
             std::cout << "Invalid choice, please try again.\n";
