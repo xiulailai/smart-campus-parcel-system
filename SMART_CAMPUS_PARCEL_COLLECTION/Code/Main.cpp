@@ -1,6 +1,7 @@
 #include "Task1/ParcelIntake.hpp"
 #include "Task2/ServiceRequest.hpp"
 #include "Task3/ResourceQueue.hpp"
+#include "Task4/ActivityLog.hpp"
 #include "Task5/ParcelCategoryTree.hpp"
 #include <fstream>
 #include <iostream>
@@ -105,6 +106,25 @@ void sortAndRequestNext(ParcelModule& parcels, ServiceModule& service) {
         std::cout << "[Info] No new request: " << msg << "\n";
 }
 
+// Task 4: records an assignment in the activity log. Only Main.cpp knows the
+// request, the resource that took it and the parcel's status before and after.
+void logAssignment(ParcelModule& parcels, ResourceManager& resources, ActivityModule& activities,
+    const ServiceRequest& r, const std::string& oldStatus) {
+    Parcel after;
+    if (!parcels.findParcel(r.parcelID, after)) return;
+    std::string resourceID = "-";
+    for (int i = 0; i < resources.resourceCount(); i++) {      // the resource now holding it
+        Resource* res = resources.resourceAt(i);
+        if (res != 0 && res->status == OCCUPIED && res->currentAssignment == r.requestID) {
+            resourceID = res->resourceID;
+            break;
+        }
+    }
+    if (!activities.logActivity(r.parcelID, ACT_ASSIGNED, oldStatus.empty() ? after.status : oldStatus,
+        after.status, r.requestID, resourceID))
+        std::cout << "[Warning] " << activities.lastError() << "\n";
+}
+
 // ---------------------------------------------------------------------------
 // Integrated flow (system steps 5-7).  Task 2 decides, Task 3 allocates:
 //   1. Task 2 says which Pending request is the most urgent      (peekNext)
@@ -115,7 +135,8 @@ void sortAndRequestNext(ParcelModule& parcels, ServiceModule& service) {
 // If nobody is free in step 3 nothing changes: the request simply stays Pending.
 // ---------------------------------------------------------------------------
 void assignNextRequest(ServiceModule& service, ResourceManager& resources,
-    const std::string& resourcesPath, bool chooseResource) {
+    const std::string& resourcesPath, bool chooseResource,
+    ParcelModule& parcels, ActivityModule& activities) {
     ServiceRequest r;
     std::string msg;
     if (!service.peekNext(r)) {
@@ -145,8 +166,13 @@ void assignNextRequest(ServiceModule& service, ResourceManager& resources,
     }
     resources.saveToCSV(resourcesPath);              // keep resources.csv in step
 
-    if (service.markAssigned(r.requestID, msg))
+    Parcel before;                                   // Task 4: parcel status before the assignment
+    std::string oldParcelStatus = parcels.findParcel(r.parcelID, before) ? before.status : "";
+
+    if (service.markAssigned(r.requestID, msg)) {
         std::cout << "[OK] " << msg << "\n";
+        logAssignment(parcels, resources, activities, r, oldParcelStatus);   // Task 4
+    }
     else
         std::cout << "[Warning] Resource allocated but request not updated: " << msg << "\n";
 }
@@ -163,6 +189,7 @@ int main() {
     std::string requestsPath = findDataFile("requests.csv");
     std::string parcelsPath = findDataFile("parcels.csv");
     std::string resourcesPath = findDataFile("resources.csv");
+    std::string activitiesPath = findDataFile("activities.csv");
 
     ParcelModule parcels(parcelsPath, requestsPath);    // Task 1
     parcels.load();
@@ -181,6 +208,10 @@ int main() {
     manager.setRequestLostHook(onRequestLost);
     manager.setBeforeReleaseHook(beforeRelease);
 
+    ActivityModule activities(activitiesPath);          // Task 4
+    activities.load();
+    activities.connect(&parcels, &service, &manager, resourcesPath);   // lets undo reach Tasks 1-3
+
     int choice;
     do {
         std::cout << "\n==============================================\n"
@@ -193,6 +224,7 @@ int main() {
             << "  5. Sort the next parcel and open its request (Task 1 + Task 2)\n"
             << "  6. Assign the next request to a resource I choose (Task 2 + Task 3)\n"
             << "  7. Task 5 - Parcel category organisation (BST)\n"
+            << "  8. Task 4 - Parcel activity history and undo\n"
             << "  0. Exit\n"
             << "----------------------------------------------\n"
             << "Enter choice: ";
@@ -206,14 +238,16 @@ int main() {
             break;
         case 3: runTask3Menu(manager);
             break;
-        case 4: assignNextRequest(service, manager, resourcesPath, false);
+        case 4: assignNextRequest(service, manager, resourcesPath, false, parcels, activities);
             break;
         case 5: sortAndRequestNext(parcels, service);
             break;
-        case 6: assignNextRequest(service, manager, resourcesPath, true);
+        case 6: assignNextRequest(service, manager, resourcesPath, true, parcels, activities);
             break;
         case 7: parcelCategories.run();
         break;
+        case 8: activities.run();
+            break;
         case 0:
             break;
         default: std::cout << "Invalid choice.\n";

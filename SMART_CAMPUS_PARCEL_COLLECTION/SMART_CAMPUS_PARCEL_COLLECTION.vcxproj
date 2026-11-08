@@ -143,12 +143,14 @@
     <ClCompile Include="Code\Task1\ParcelIntake.cpp" />
     <ClCompile Include="Code\Task2\ServiceRequest.cpp" />
     <ClCompile Include="Code\Task3\ResourceQueue.cpp" />
+    <ClCompile Include="Code\Task4\ActivityLog.cpp" />
     <ClCompile Include="Code\Task5\ParcelCategoryTree.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Code\Task1\ParcelIntake.hpp" />
     <ClInclude Include="Code\Task2\ServiceRequest.hpp" />
     <ClInclude Include="Code\Task3\ResourceQueue.hpp" />
+    <ClInclude Include="Code\Task4\ActivityLog.hpp" />
     <ClInclude Include="Code\Task5\ParcelCategoryTree.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
