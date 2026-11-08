@@ -754,6 +754,31 @@ static void task3_menuWithTask2() {
             "R001 is a Collection request, so it must not go to a delivery person",
             "typing the wrong service type put R001 on " + holder + " and Task 2 still marked it Assigned");
     }
+    {
+        Fixture fx("t3_menu3");
+        ServiceModule sm(fx.requests, fx.parcels);
+        sm.load();
+        ResourceManager rm;
+        rm.loadFromCSV(fx.resources);
+        ServiceRequest r;
+        { Console c("3\nr001\ncollection\n0\n"); runTask3Menu(rm, &sm); }
+        std::string holder = holderOf(rm, "R001");
+        CHECK(!holder.empty() && holder[0] == 'C' && sm.findRequest("R001", r) && r.status == STATUS_ASSIGNED,
+            "option 3 with the right service type still assigns a counter and Task 2 marks it Assigned");
+        { Console c("7\nR009\nCollection\nC04\n0\n"); runTask3Menu(rm, &sm); }
+        CHECK(holderOf(rm, "R009").empty() && sm.findRequest("R009", r) && r.status == STATUS_PENDING,
+            "option 7 refuses a service type that is not the request's own");
+        { Console c("7\nR009\nCampusDelivery\nD04\n0\n"); runTask3Menu(rm, &sm); }
+        CHECK(holderOf(rm, "R009") == "D04" && sm.findRequest("R009", r) && r.status == STATUS_ASSIGNED,
+            "option 7 with the right type assigns the chosen delivery person");
+    }
+    {
+        Fixture fx("t3_menu4");
+        ResourceManager rm;
+        rm.loadFromCSV(fx.resources);
+        { Console c("3\nR001\nCampusDelivery\n0\n"); runTask3Menu(rm, nullptr); }
+        CHECK(holderOf(rm, "R001") == "D04", "without Task 2 connected, the menu still assigns by the typed type");
+    }
 }
 
 // ============================================================================
